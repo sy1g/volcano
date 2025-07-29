@@ -35,6 +35,7 @@ function install-admission-policys {
   echo "Installing AdmissionPolicy "
   kubectl apply -f "pkg/webhooks/admission/hypernodes/policies/validating-admission-policy.yaml"
   kubectl apply -f "pkg/webhooks/admission/pods/policies/validating-admission-policy.yaml"
+  kubectl apply -f "pkg/webhooks/admission/pods/policies/mutating-admission-policy.yaml"
 }
 
 function install-volcano {
