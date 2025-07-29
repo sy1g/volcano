@@ -33,7 +33,7 @@ export KIND_OPT=${KIND_OPT:="--config ${VK_ROOT}/hack/e2e-kind-config.yaml"}
 
 function install-admission-policys {
   echo "Installing AdmissionPolicy "
-  kubectl apply -f "${VK_ROOT}/pkg/webhooks/admission/hypernodes/policies/validating-admission-policy.yaml"
+  kubectl apply -f "pkg/webhooks/admission/hypernodes/policies/validating-admission-policy.yaml"
   # kubectl apply -f "${VK_ROOT}/installer/crds/mutatingadmissionpolicy.admissionregistration.k8s.io_volcano.sh_mutatingadmissionpolicysubscriptions.yaml"
 }
 
@@ -93,6 +93,8 @@ custom:
     node-role.kubernetes.io/control-plane: ""
   scheduler_feature_gates: ${FEATURE_GATES}
 EOF
+  # install-admission-policys
+  # echo "Volcano installed successfully"
 }
 
 function uninstall-volcano {
