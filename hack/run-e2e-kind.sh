@@ -31,11 +31,6 @@ export CLUSTER_CONTEXT=("--name" "${CLUSTER_NAME}")
 
 export KIND_OPT=${KIND_OPT:="--config ${VK_ROOT}/hack/e2e-kind-config.yaml"}
 
-function install-admission-policys {
-  echo "Installing AdmissionPolicy "
-  kubectl apply -f "${VK_ROOT}/pkg/webhooks/admission/hypernodes/policies/validating-admission-policy.yaml"
-  # kubectl apply -f "${VK_ROOT}/installer/crds/mutatingadmissionpolicy.admissionregistration.k8s.io_volcano.sh_mutatingadmissionpolicysubscriptions.yaml"
-}
 
 function install-volcano {
   install-helm
