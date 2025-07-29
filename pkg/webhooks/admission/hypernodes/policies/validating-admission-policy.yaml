@@ -1,0 +1,95 @@
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: hypernode-validation-policy
+  labels:
+    volcano.sh/component: hypernode-webhook
+    volcano.sh/migration: vap
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+  - resourceRules:
+    - operations: ["CREATE", "UPDATE"]
+      apiGroups: ["topology.volcano.sh"]
+      apiVersions: ["v1alpha1"]
+      resources: ["hypernodes"]
+  variables:
+  - name: members
+    expression: "has(object.spec.members) ? object.spec.members : []"
+  validations:
+  # 1. Member Count Validation - At least one member required
+  - expression: "has(object.spec.members) && size(object.spec.members) > 0"
+    message: "HyperNode must have at least one member"
+    reason: Invalid
+  
+  # 2. Member Selector Mutual Exclusivity - Only one selector type allowed
+  - expression: |
+      variables.members.all(member,
+        [
+          has(member.selector.exactMatch) ? 1 : 0,
+          has(member.selector.regexMatch) ? 1 : 0,
+          has(member.selector.labelMatch) ? 1 : 0
+        ].sum() == 1
+      )
+    message: "Member selector must have exactly one of exactMatch, regexMatch, or labelMatch"
+    reason: Invalid
+  
+  # 3. ExactMatch Name Required - Name field must be non-empty when exactMatch is used
+  - expression: |
+      variables.members.all(member,
+        !has(member.selector.exactMatch) ||
+        (has(member.selector.exactMatch.name) && size(member.selector.exactMatch.name) > 0)
+      )
+    message: "Member exactMatch name is required and cannot be empty when exactMatch is specified"
+    reason: Invalid
+  
+  # 4. RegexMatch Pattern Required - Pattern field must be non-empty when regexMatch is used
+  - expression: |
+      variables.members.all(member,
+        !has(member.selector.regexMatch) ||
+        (has(member.selector.regexMatch.pattern) && size(member.selector.regexMatch.pattern) > 0)
+      )
+    message: "Member regexMatch pattern is required and cannot be empty when regexMatch is specified"
+    reason: Invalid
+  
+  # 5. Basic Kubernetes Name Validation for ExactMatch
+  # Simple validation for qualified names: lowercase alphanumeric + hyphens + dots
+  - expression: |
+      variables.members.all(member,
+        !has(member.selector.exactMatch) ||
+        (member.selector.exactMatch.name.matches('^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$') &&
+         size(member.selector.exactMatch.name) <= 253)
+      )
+    message: "Member exactMatch name must be a valid Kubernetes qualified name (lowercase alphanumeric, hyphens, dots, max 253 chars)"
+    reason: Invalid
+  
+  # 6. Basic Regex Pattern Format Validation
+  # Ensure pattern doesn't contain obviously invalid regex characters
+  - expression: |
+      variables.members.all(member,
+        !has(member.selector.regexMatch) ||
+        (size(member.selector.regexMatch.pattern) <= 1000 &&
+         !member.selector.regexMatch.pattern.contains('\\c') &&
+         !member.selector.regexMatch.pattern.contains('\\Q') &&
+         !member.selector.regexMatch.pattern.contains('\\E'))
+      )
+    message: "Member regexMatch pattern appears to contain invalid regex syntax"
+    reason: Invalid
+
+---
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: hypernode-validation-policy-binding
+  labels:
+    volcano.sh/component: hypernode-webhook
+    volcano.sh/migration: vap
+spec:
+  policyName: hypernode-validation-policy
+  validationActions: [Warn] # Start with Warn for gradual migration, change to Audit then Deny
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+      - key: name
+        operator: NotIn
+        values: ["kube-system", "kube-public", "kube-node-lease"]

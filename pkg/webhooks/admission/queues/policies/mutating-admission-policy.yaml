@@ -1,0 +1,126 @@
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingAdmissionPolicy
+metadata:
+  name: queue-mutation-policy
+  labels:
+    volcano.sh/component: queue-webhook
+    volcano.sh/migration: map
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+  - resourceRules:
+    - operations: ["CREATE", "UPDATE"]
+      apiGroups: ["scheduling.volcano.sh"]
+      apiVersions: ["v1beta1"]
+      resources: ["queues"]
+  mutations:
+  # 1. Default Reclaimable - Set to true if not specified
+  - target:
+      group: scheduling.volcano.sh
+      version: v1beta1
+      kind: Queue
+    patchType: strategic
+    patches:
+    - op: add
+      path: /spec/reclaimable
+      value: true
+      condition: "!has(object.spec.reclaimable)"
+  
+  # 2. Default Weight - Set to 1 if not specified
+  - target:
+      group: scheduling.volcano.sh
+      version: v1beta1
+      kind: Queue
+    patchType: strategic
+    patches:
+    - op: add
+      path: /spec/weight
+      value: 1
+      condition: "!has(object.spec.weight) || object.spec.weight == 0"
+  
+  # 3. Default State - Set to Open for new queues
+  - target:
+      group: scheduling.volcano.sh
+      version: v1beta1
+      kind: Queue
+    patchType: strategic
+    patches:
+    - op: add
+      path: /spec/state
+      value: "Open"
+      condition: "!has(object.spec.state) || object.spec.state == ''"
+  
+  # 4. Hierarchy Root Node Addition
+  # Add "root/" prefix to hierarchy if not present
+  - target:
+      group: scheduling.volcano.sh
+      version: v1beta1
+      kind: Queue
+    patchType: strategic
+    patches:
+    - op: replace
+      path: /metadata/annotations/scheduling.volcano.sh~1hierarchy
+      value: "root/" + object.metadata.annotations['scheduling.volcano.sh/hierarchy']
+      condition: |
+        has(object.metadata.annotations) &&
+        has(object.metadata.annotations['scheduling.volcano.sh/hierarchy']) &&
+        !object.metadata.annotations['scheduling.volcano.sh/hierarchy'].startsWith('root/')
+  
+  # 5. Hierarchy Weights Root Addition
+  # Add "1/" prefix to hierarchy weights when hierarchy is modified
+  - target:
+      group: scheduling.volcano.sh
+      version: v1beta1
+      kind: Queue
+    patchType: strategic
+    patches:
+    - op: replace
+      path: /metadata/annotations/scheduling.volcano.sh~1hierarchy-weights
+      value: "1/" + object.metadata.annotations['scheduling.volcano.sh/hierarchy-weights']
+      condition: |
+        has(object.metadata.annotations) &&
+        has(object.metadata.annotations['scheduling.volcano.sh/hierarchy']) &&
+        has(object.metadata.annotations['scheduling.volcano.sh/hierarchy-weights']) &&
+        !object.metadata.annotations['scheduling.volcano.sh/hierarchy'].startsWith('root/') &&
+        !object.metadata.annotations['scheduling.volcano.sh/hierarchy-weights'].startsWith('1/')
+  
+  # 6. Default Guarantee - Set resource guarantee to empty if not specified
+  - target:
+      group: scheduling.volcano.sh
+      version: v1beta1
+      kind: Queue
+    patchType: strategic
+    patches:
+    - op: add
+      path: /spec/guarantee
+      value: {}
+      condition: "!has(object.spec.guarantee)"
+  
+  # 7. Default Capability - Set resource capability to empty if not specified
+  - target:
+      group: scheduling.volcano.sh
+      version: v1beta1
+      kind: Queue
+    patchType: strategic
+    patches:
+    - op: add
+      path: /spec/capability
+      value: {}
+      condition: "!has(object.spec.capability)"
+
+---
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingAdmissionPolicyBinding
+metadata:
+  name: queue-mutation-policy-binding
+  labels:
+    volcano.sh/component: queue-webhook
+    volcano.sh/migration: map
+spec:
+  policyName: queue-mutation-policy
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+      - key: name
+        operator: NotIn
+        values: ["kube-system", "kube-public", "kube-node-lease"]
