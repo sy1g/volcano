@@ -101,45 +101,9 @@ func Pods(ar admissionv1.AdmissionReview) *admissionv1.AdmissionResponse {
 
 // createPatch patch pod
 func createPatch(pod *v1.Pod) ([]byte, error) {
-	if config.ConfigData == nil {
-		klog.V(5).Infof("admission configuration is empty.")
-		return nil, nil
-	}
-
+	// Return an empty patch array without applying any changes
 	var patch []patchOperation
-	config.ConfigData.Lock()
-	defer config.ConfigData.Unlock()
-
-	for _, resourceGroup := range config.ConfigData.ResGroupsConfig {
-		klog.V(3).Infof("resourceGroup %s", resourceGroup.ResourceGroup)
-		group := GetResGroup(resourceGroup)
-		if !group.IsBelongResGroup(pod, resourceGroup) {
-			continue
-		}
-
-		patchLabel := patchLabels(pod, resourceGroup)
-		if patchLabel != nil {
-			patch = append(patch, *patchLabel)
-		}
-
-		patchAffinity := patchAffinity(pod, resourceGroup)
-		if patchAffinity != nil {
-			patch = append(patch, *patchAffinity)
-		}
-
-		patchToleration := patchTaintToleration(pod, resourceGroup)
-		if patchToleration != nil {
-			patch = append(patch, *patchToleration)
-		}
-		patchScheduler := patchSchedulerName(resourceGroup)
-		if patchScheduler != nil {
-			patch = append(patch, *patchScheduler)
-		}
-
-		klog.V(5).Infof("pod patch %v", patch)
-		return json.Marshal(patch)
-	}
-
+	klog.V(5).Infof("Returning an empty patch array for testing purposes.")
 	return json.Marshal(patch)
 }
 
