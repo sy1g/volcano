@@ -1,134 +1,60 @@
-apiVersion: admissionregistration.k8s.io/v1beta1
+apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
   name: pod-validation-policy
-  labels:
-    volcano.sh/component: pod-webhook
-    volcano.sh/migration: vap
 spec:
   failurePolicy: Fail
   matchConstraints:
-  - resourceRules:
-    - operations: ["CREATE", "UPDATE"]
+    resourceRules:
+    - operations: ["CREATE"]
       apiGroups: [""]
       apiVersions: ["v1"]
       resources: ["pods"]
   variables:
-  - name: hasVolcanoAnnotations
+  - name: volcanoScheduler
     expression: |
-      has(object.metadata.annotations) &&
-      (has(object.metadata.annotations['scheduling.volcano.sh/job-name']) ||
-       has(object.metadata.annotations['scheduling.volcano.sh/task-name']) ||
-       has(object.metadata.annotations['scheduling.volcano.sh/queue-name']) ||
-       has(object.metadata.annotations['scheduling.volcano.sh/job-version']))
-  - name: jdbAnnotation
-    expression: |
-      has(object.metadata.annotations) && 
-      has(object.metadata.annotations['scheduling.volcano.sh/job-name']) ?
-      object.metadata.annotations['scheduling.volcano.sh/job-name'] : ""
+      has(object.spec.schedulerName) && object.spec.schedulerName == "volcano"
   validations:
-  # 1. JDB (Job Database) Annotation Validation
-  # Only validate volcano-scheduled pods (those with volcano annotations)
+  # not allow configure multiple annotations at same time
   - expression: |
-      !variables.hasVolcanoAnnotations || 
-      (size(variables.jdbAnnotation) > 0 && 
-       variables.jdbAnnotation.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'))
-    message: "Pod with volcano annotations must have valid job-name annotation"
+      variables.volcanoScheduler || !(
+        ("volcano.sh/jdb-min-available" in object.metadata.annotations) &&
+        ("volcano.sh/jdb-max-unavailable" in object.metadata.annotations)
+      ) 
+    message: "not allow configure multiple annotations at same time"
     reason: Invalid
-  
-  # 2. Task Name Validation for Volcano Pods
+  # not allow negative values for jdb-min-available
   - expression: |
-      !variables.hasVolcanoAnnotations || 
-      !has(object.metadata.annotations['scheduling.volcano.sh/task-name']) ||
-      (size(object.metadata.annotations['scheduling.volcano.sh/task-name']) > 0 &&
-       object.metadata.annotations['scheduling.volcano.sh/task-name'].matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'))
-    message: "Task name annotation must be a valid Kubernetes name"
-    reason: Invalid
-  
-  # 3. Queue Name Validation for Volcano Pods
-  - expression: |
-      !variables.hasVolcanoAnnotations || 
-      !has(object.metadata.annotations['scheduling.volcano.sh/queue-name']) ||
-      (size(object.metadata.annotations['scheduling.volcano.sh/queue-name']) > 0 &&
-       object.metadata.annotations['scheduling.volcano.sh/queue-name'].matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'))
-    message: "Queue name annotation must be a valid Kubernetes name"
-    reason: Invalid
-  
-  # 4. Job Version Validation
-  - expression: |
-      !has(object.metadata.annotations) ||
-      !has(object.metadata.annotations['scheduling.volcano.sh/job-version']) ||
-      object.metadata.annotations['scheduling.volcano.sh/job-version'].matches('^[0-9]+$')
-    message: "Job version annotation must be a valid number"
-    reason: Invalid
-  
-  # 5. Volcano Scheduler Name Validation
-  # Ensure pods with volcano annotations use volcano scheduler
-  - expression: |
-      !variables.hasVolcanoAnnotations || 
-      (has(object.spec.schedulerName) && 
-       object.spec.schedulerName in ["volcano", "volcano-scheduler"])
-    message: "Pods with volcano annotations must use volcano scheduler"
-    reason: Invalid
-  
-  # 6. Resource Request Validation for Volcano Pods
-  # Ensure volcano pods have resource requests for better scheduling
-  - expression: |
-      !variables.hasVolcanoAnnotations || 
-      (has(object.spec.containers) &&
-       object.spec.containers.all(container,
-         has(container.resources) && 
-         has(container.resources.requests) &&
-         (has(container.resources.requests.cpu) || has(container.resources.requests.memory))
-       ))
-    message: "Volcano-scheduled pods should specify resource requests (CPU or memory)"
-    reason: Invalid
-  
-  # 7. PodGroup Reference Validation
-  - expression: |
-      !has(object.metadata.annotations) ||
-      !has(object.metadata.annotations['scheduling.volcano.sh/podgroup-name']) ||
-      (size(object.metadata.annotations['scheduling.volcano.sh/podgroup-name']) > 0 &&
-       object.metadata.annotations['scheduling.volcano.sh/podgroup-name'].matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'))
-    message: "PodGroup name annotation must be a valid Kubernetes name"
-    reason: Invalid
-  
-  # 8. Container Name Validation for Multi-Container Volcano Pods
-  - expression: |
-      !variables.hasVolcanoAnnotations || 
-      !has(object.spec.containers) ||
-      size(object.spec.containers) <= 1 ||
-      object.spec.containers.all(container,
-        has(container.name) && size(container.name) > 0 &&
-        container.name.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$')
+      variables.volcanoScheduler || !("volcano.sh/jdb-min-available" in object.metadata.annotations) ||
+      (
+        object.metadata.annotations["volcano.sh/jdb-min-available"].matches('^[0-9]+$') &&
+        int(object.metadata.annotations["volcano.sh/jdb-min-available"]) > 0
+      ) ||
+      (
+        object.metadata.annotations["volcano.sh/jdb-min-available"].matches('^[0-9]+%$') &&
+        int(object.metadata.annotations["volcano.sh/jdb-min-available"].replace('%', '')) > 0 &&
+        int(object.metadata.annotations["volcano.sh/jdb-min-available"].replace('%', '')) < 100
       )
-    message: "All containers in volcano pods must have valid names"
+    message: "jdb-min-available must be a positive integer or a valid percentage which between 1% ~ 99%"
     reason: Invalid
-  
-  # 9. Volume Mount Validation for Volcano Pods
+  # not allow negative values for jdb-max-unavailable
   - expression: |
-      !variables.hasVolcanoAnnotations || 
-      !has(object.spec.containers) ||
-      object.spec.containers.all(container,
-        !has(container.volumeMounts) ||
-        container.volumeMounts.all(mount,
-          has(mount.name) && size(mount.name) > 0 &&
-          has(mount.mountPath) && size(mount.mountPath) > 0 &&
-          mount.mountPath.startsWith('/')
-        )
+      variables.volcanoScheduler || !("volcano.sh/jdb-max-unavailable" in object.metadata.annotations) ||
+      (
+        object.metadata.annotations["volcano.sh/jdb-max-unavailable"].matches('^[0-9]+$') &&
+        int(object.metadata.annotations["volcano.sh/jdb-max-unavailable"]) > 0
+      ) ||
+      (
+        object.metadata.annotations["volcano.sh/jdb-max-unavailable"].matches('^[0-9]+%$') &&
+        int(object.metadata.annotations["volcano.sh/jdb-max-unavailable"].replace('%', '')) > 0 &&
+        int(object.metadata.annotations["volcano.sh/jdb-max-unavailable"].replace('%', '')) < 100
       )
-    message: "Volume mounts must have valid names and absolute mount paths"
-    reason: Invalid
-  
-  # 10. Priority Class Validation
-  - expression: |
-      !has(object.spec.priorityClassName) ||
-      object.spec.priorityClassName.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$')
-    message: "Priority class name must be a valid Kubernetes name"
+    message: "jdb-max-unavailable must be a positive integer or a valid percentage which between 1% ~ 99%"
     reason: Invalid
 
+
 ---
-apiVersion: admissionregistration.k8s.io/v1beta1
+apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
 metadata:
   name: pod-validation-policy-binding
@@ -137,7 +63,7 @@ metadata:
     volcano.sh/migration: vap
 spec:
   policyName: pod-validation-policy
-  validationActions: [Warn] # Start with Warn for gradual migration
+  validationActions: [Deny]
   matchResources:
     namespaceSelector:
       matchExpressions:
