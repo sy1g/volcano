@@ -25,11 +25,14 @@ import (
 	admissionv1 "k8s.io/api/admission/v1"
 	whv1 "k8s.io/api/admissionregistration/v1"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/klog/v2"
 
 	vcv1beta1 "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
 	"volcano.sh/volcano/pkg/webhooks/router"
+	"volcano.sh/volcano/pkg/webhooks/schema"
+	"volcano.sh/volcano/pkg/webhooks/util"
 )
 
 func init() {
@@ -65,8 +68,26 @@ var config = &router.AdmissionServiceConfig{}
 func AdmitPods(ar admissionv1.AdmissionReview) *admissionv1.AdmissionResponse {
 	klog.V(3).Infof("admitting pods -- %s", ar.Request.Operation)
 
+	pod, err := schema.DecodePod(ar.Request.Object, ar.Request.Resource)
+	if err != nil {
+		return util.ToAdmissionResponse(err)
+	}
+
+	var msg string
 	reviewResponse := admissionv1.AdmissionResponse{}
 	reviewResponse.Allowed = true
+
+	switch ar.Request.Operation {
+	case admissionv1.Create:
+		msg = validatePod(pod, &reviewResponse)
+	default:
+		err := fmt.Errorf("expect operation to be 'CREATE'")
+		return util.ToAdmissionResponse(err)
+	}
+
+	if !reviewResponse.Allowed {
+		reviewResponse.Result = &metav1.Status{Message: strings.TrimSpace(msg)}
+	}
 	return &reviewResponse
 }
 
