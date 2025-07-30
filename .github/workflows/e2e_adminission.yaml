@@ -1,4 +1,4 @@
-name: Basic scheduling Jobs
+name: E2E Admission Tests
 
 on:
   push:
