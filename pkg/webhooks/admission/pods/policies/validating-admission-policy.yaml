@@ -17,7 +17,7 @@ spec:
   validations:
   # not allow configure multiple annotations at same time
   - expression: |
-      variables.volcanoScheduler || !(
+      !variables.volcanoScheduler || !(type(object.metadata.annotations) == map) || !has(object.metadata.annotations) || !(
         ("volcano.sh/jdb-min-available" in object.metadata.annotations) &&
         ("volcano.sh/jdb-max-unavailable" in object.metadata.annotations)
       ) 
@@ -25,7 +25,7 @@ spec:
     reason: Invalid
   # not allow negative values for jdb-min-available
   - expression: |
-      variables.volcanoScheduler || !("volcano.sh/jdb-min-available" in object.metadata.annotations) ||
+      !variables.volcanoScheduler || !(type(object.metadata.annotations) == map) || !has(object.metadata.annotations) || !("volcano.sh/jdb-min-available" in object.metadata.annotations) ||
       (
         object.metadata.annotations["volcano.sh/jdb-min-available"].matches('^[0-9]+$') &&
         int(object.metadata.annotations["volcano.sh/jdb-min-available"]) > 0
@@ -39,7 +39,7 @@ spec:
     reason: Invalid
   # not allow negative values for jdb-max-unavailable
   - expression: |
-      variables.volcanoScheduler || !("volcano.sh/jdb-max-unavailable" in object.metadata.annotations) ||
+      !variables.volcanoScheduler || !(type(object.metadata.annotations) == map) || !has(object.metadata.annotations) || !("volcano.sh/jdb-max-unavailable" in object.metadata.annotations) ||
       (
         object.metadata.annotations["volcano.sh/jdb-max-unavailable"].matches('^[0-9]+$') &&
         int(object.metadata.annotations["volcano.sh/jdb-max-unavailable"]) > 0
