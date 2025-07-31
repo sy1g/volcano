@@ -1,4 +1,4 @@
-name: E2E Admission Tests
+name: E2E Admission
 
 on:
   push:

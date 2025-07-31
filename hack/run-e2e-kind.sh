@@ -91,7 +91,7 @@ custom:
   default_ns:
     node-role.kubernetes.io/control-plane: ""
   scheduler_feature_gates: ${FEATURE_GATES}
-  enabled_admissions: "/pods/mutate,/queues/mutate,/podgroups/mutate,/jobs/mutate,/jobs/validate,/jobflows/validate,/queues/validate,/podgroups/validate,/hypernodes/validate"
+  enabled_admissions: "/pods/mutate,/queues/mutate,/podgroups/mutate,/jobs/mutate,/jobs/validate,/jobflows/validate,/podgroups/validate,/hypernodes/validate"
 EOF
   install-admission-policys
 }
@@ -192,7 +192,6 @@ case ${E2E_TYPE} in
 "ADMISSION")
     echo "Running admission webhook e2e suite..."
     KUBECONFIG=${KUBECONFIG} GOOS=${OS} ginkgo -v -r --show-node-events ./test/e2e/admission/
-    echo KUBECONFIG=${KUBECONFIG} GOOS=${OS} 
     ;;
 esac
 
