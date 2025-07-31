@@ -33,6 +33,7 @@ export KIND_OPT=${KIND_OPT:="--config ${VK_ROOT}/hack/e2e-kind-config.yaml"}
 
 function install-admission-policys {
   echo "Installing AdmissionPolicy "
+  kubectl apply -f "pkg/webhooks/admission/hypernodes/policies/validating-admission-policy.yaml"
   kubectl apply -f "pkg/webhooks/admission/pods/policies/validating-admission-policy.yaml"
   kubectl apply -f "pkg/webhooks/admission/queues/policies/validating-admission-policy.yaml"
 }

@@ -383,11 +383,15 @@ var _ = ginkgo.Describe("HyperNode Validating Webhook E2E Test", func() {
 			},
 		}
 
-		createdHyperNode, err := testCtx.Vcclient.TopologyV1alpha1().HyperNodes().Create(context.TODO(), hyperNode, metav1.CreateOptions{})
+		_, err := testCtx.Vcclient.TopologyV1alpha1().HyperNodes().Create(context.TODO(), hyperNode, metav1.CreateOptions{})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+
+		// Fetch the latest version before updating
+		latestHyperNode, err := testCtx.Vcclient.TopologyV1alpha1().HyperNodes().Get(context.TODO(), hyperNodeName, metav1.GetOptions{})
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Update HyperNode with valid changes
-		createdHyperNode.Spec.Members = []hypernodev1alpha1.MemberSpec{
+		latestHyperNode.Spec.Members = []hypernodev1alpha1.MemberSpec{
 			{
 				Type: hypernodev1alpha1.MemberTypeNode,
 				Selector: hypernodev1alpha1.MemberSelector{
@@ -398,7 +402,7 @@ var _ = ginkgo.Describe("HyperNode Validating Webhook E2E Test", func() {
 			},
 		}
 
-		_, err = testCtx.Vcclient.TopologyV1alpha1().HyperNodes().Update(context.TODO(), createdHyperNode, metav1.UpdateOptions{})
+		_, err = testCtx.Vcclient.TopologyV1alpha1().HyperNodes().Update(context.TODO(), latestHyperNode, metav1.UpdateOptions{})
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Cleanup
@@ -431,13 +435,17 @@ var _ = ginkgo.Describe("HyperNode Validating Webhook E2E Test", func() {
 			},
 		}
 
-		createdHyperNode, err := testCtx.Vcclient.TopologyV1alpha1().HyperNodes().Create(context.TODO(), hyperNode, metav1.CreateOptions{})
+		_, err := testCtx.Vcclient.TopologyV1alpha1().HyperNodes().Create(context.TODO(), hyperNode, metav1.CreateOptions{})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+
+		// Fetch the latest version before updating
+		latestHyperNode, err := testCtx.Vcclient.TopologyV1alpha1().HyperNodes().Get(context.TODO(), hyperNodeName, metav1.GetOptions{})
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Update HyperNode with invalid changes (empty members)
-		createdHyperNode.Spec.Members = []hypernodev1alpha1.MemberSpec{}
+		latestHyperNode.Spec.Members = []hypernodev1alpha1.MemberSpec{}
 
-		_, err = testCtx.Vcclient.TopologyV1alpha1().HyperNodes().Update(context.TODO(), createdHyperNode, metav1.UpdateOptions{})
+		_, err = testCtx.Vcclient.TopologyV1alpha1().HyperNodes().Update(context.TODO(), latestHyperNode, metav1.UpdateOptions{})
 		gomega.Expect(err).To(gomega.HaveOccurred())
 		gomega.Expect(err.Error()).To(gomega.ContainSubstring("member must have at least one member"))
 
