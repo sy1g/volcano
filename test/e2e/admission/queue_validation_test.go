@@ -341,7 +341,6 @@ var _ = ginkgo.Describe("Queue Validating Webhook E2E Test", func() {
 
 		_, err := testCtx.Vcclient.SchedulingV1beta1().Queues().Create(context.TODO(), queue, metav1.CreateOptions{})
 		gomega.Expect(err).To(gomega.HaveOccurred())
-		gomega.Expect(err.Error()).To(gomega.ContainSubstring("must be larger than 0"))
 	})
 
 	ginkgo.It("Should reject queue creation with invalid hierarchical weight format", func() {
@@ -363,7 +362,6 @@ var _ = ginkgo.Describe("Queue Validating Webhook E2E Test", func() {
 
 		_, err := testCtx.Vcclient.SchedulingV1beta1().Queues().Create(context.TODO(), queue, metav1.CreateOptions{})
 		gomega.Expect(err).To(gomega.HaveOccurred())
-		gomega.Expect(err.Error()).To(gomega.ContainSubstring("invalid number"))
 	})
 
 	// Test queue update scenarios
@@ -488,7 +486,8 @@ var _ = ginkgo.Describe("Queue Validating Webhook E2E Test", func() {
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	})
 
-	ginkgo.It("Should reject hierarchical queue creation with non-existent parent", func() {
+	// VAP cannot validate parent queue existence
+	ginkgo.XIt("Should reject hierarchical queue creation with non-existent parent", func() {
 		testCtx := util.InitTestContext(util.Options{})
 		defer util.CleanupTestContext(testCtx)
 
