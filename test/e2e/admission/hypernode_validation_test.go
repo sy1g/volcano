@@ -22,6 +22,7 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	hypernodev1alpha1 "volcano.sh/apis/pkg/apis/topology/v1alpha1"
@@ -386,24 +387,35 @@ var _ = ginkgo.Describe("HyperNode Validating Webhook E2E Test", func() {
 		_, err := testCtx.Vcclient.TopologyV1alpha1().HyperNodes().Create(context.TODO(), hyperNode, metav1.CreateOptions{})
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
-		// Fetch the latest version before updating
-		latestHyperNode, err := testCtx.Vcclient.TopologyV1alpha1().HyperNodes().Get(context.TODO(), hyperNodeName, metav1.GetOptions{})
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		// Retry update with fresh object on conflict
+		var updateErr error
+		for retryCount := 0; retryCount < 5; retryCount++ {
+			// Fetch the latest version before updating
+			latestHyperNode, err := testCtx.Vcclient.TopologyV1alpha1().HyperNodes().Get(context.TODO(), hyperNodeName, metav1.GetOptions{})
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
-		// Update HyperNode with valid changes
-		latestHyperNode.Spec.Members = []hypernodev1alpha1.MemberSpec{
-			{
-				Type: hypernodev1alpha1.MemberTypeNode,
-				Selector: hypernodev1alpha1.MemberSelector{
-					RegexMatch: &hypernodev1alpha1.RegexMatch{
-						Pattern: "node-[1-5]",
+			// Update HyperNode with valid changes
+			latestHyperNode.Spec.Members = []hypernodev1alpha1.MemberSpec{
+				{
+					Type: hypernodev1alpha1.MemberTypeNode,
+					Selector: hypernodev1alpha1.MemberSelector{
+						RegexMatch: &hypernodev1alpha1.RegexMatch{
+							Pattern: "node-[1-5]",
+						},
 					},
 				},
-			},
-		}
+			}
 
-		_, err = testCtx.Vcclient.TopologyV1alpha1().HyperNodes().Update(context.TODO(), latestHyperNode, metav1.UpdateOptions{})
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			_, updateErr = testCtx.Vcclient.TopologyV1alpha1().HyperNodes().Update(context.TODO(), latestHyperNode, metav1.UpdateOptions{})
+			if updateErr == nil {
+				break // Success
+			}
+			// Only retry on conflict errors
+			if !errors.IsConflict(updateErr) {
+				break
+			}
+		}
+		gomega.Expect(updateErr).NotTo(gomega.HaveOccurred())
 
 		// Cleanup
 		err = testCtx.Vcclient.TopologyV1alpha1().HyperNodes().Delete(context.TODO(), hyperNodeName, metav1.DeleteOptions{})
@@ -438,16 +450,28 @@ var _ = ginkgo.Describe("HyperNode Validating Webhook E2E Test", func() {
 		_, err := testCtx.Vcclient.TopologyV1alpha1().HyperNodes().Create(context.TODO(), hyperNode, metav1.CreateOptions{})
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
-		// Fetch the latest version before updating
-		latestHyperNode, err := testCtx.Vcclient.TopologyV1alpha1().HyperNodes().Get(context.TODO(), hyperNodeName, metav1.GetOptions{})
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		// Retry update with fresh object on conflict, but expect validation error
+		var updateErr error
+		for retryCount := 0; retryCount < 5; retryCount++ {
+			// Fetch the latest version before updating
+			latestHyperNode, err := testCtx.Vcclient.TopologyV1alpha1().HyperNodes().Get(context.TODO(), hyperNodeName, metav1.GetOptions{})
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
-		// Update HyperNode with invalid changes (empty members)
-		latestHyperNode.Spec.Members = []hypernodev1alpha1.MemberSpec{}
+			// Update HyperNode with invalid changes (empty members)
+			latestHyperNode.Spec.Members = []hypernodev1alpha1.MemberSpec{}
 
-		_, err = testCtx.Vcclient.TopologyV1alpha1().HyperNodes().Update(context.TODO(), latestHyperNode, metav1.UpdateOptions{})
-		gomega.Expect(err).To(gomega.HaveOccurred())
-		gomega.Expect(err.Error()).To(gomega.ContainSubstring("member must have at least one member"))
+			_, updateErr = testCtx.Vcclient.TopologyV1alpha1().HyperNodes().Update(context.TODO(), latestHyperNode, metav1.UpdateOptions{})
+			// If we get a conflict, retry with fresh object
+			if errors.IsConflict(updateErr) {
+				continue
+			}
+			// For any other error (including validation errors), break and check
+			break
+		}
+
+		// We expect an error containing our validation message
+		gomega.Expect(updateErr).To(gomega.HaveOccurred())
+		gomega.Expect(updateErr.Error()).To(gomega.ContainSubstring("member must have at least one member"))
 
 		// Cleanup
 		err = testCtx.Vcclient.TopologyV1alpha1().HyperNodes().Delete(context.TODO(), hyperNodeName, metav1.DeleteOptions{})
