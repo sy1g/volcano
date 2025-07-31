@@ -28,6 +28,8 @@ import (
 
 	hypernodev1alpha1 "volcano.sh/apis/pkg/apis/topology/v1alpha1"
 	"volcano.sh/volcano/pkg/webhooks/router"
+	"volcano.sh/volcano/pkg/webhooks/schema"
+	"volcano.sh/volcano/pkg/webhooks/util"
 )
 
 var config = &router.AdmissionServiceConfig{}
@@ -64,6 +66,18 @@ func init() {
 func AdmitHyperNode(ar admissionv1.AdmissionReview) *admissionv1.AdmissionResponse {
 	klog.V(3).Infof("admitting hypernode -- %s", ar.Request.Operation)
 
+	hypernode, err := schema.DecodeHyperNode(ar.Request.Object, ar.Request.Resource)
+	if err != nil {
+		return util.ToAdmissionResponse(err)
+	}
+
+	switch ar.Request.Operation {
+	case admissionv1.Create, admissionv1.Update:
+		err = validateHyperNode(hypernode)
+		if err != nil {
+			return util.ToAdmissionResponse(err)
+		}
+	}
 	return &admissionv1.AdmissionResponse{
 		Allowed: true,
 	}
