@@ -23,6 +23,7 @@ import (
 	"github.com/onsi/gomega"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -366,13 +367,14 @@ var _ = ginkgo.Describe("Queue Validating Webhook E2E Test", func() {
 
 	// Test queue update scenarios
 	ginkgo.It("Should allow queue state update from Open to Closed", func() {
+		queueName := "test-queue-update-state"
 		testCtx := util.InitTestContext(util.Options{})
 		defer util.CleanupTestContext(testCtx)
 
 		// Create queue with Open state
 		queue := &schedulingv1beta1.Queue{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-queue-update-state",
+				Name: queueName,
 			},
 			Spec: schedulingv1beta1.QueueSpec{
 				Weight: 1,
@@ -382,16 +384,32 @@ var _ = ginkgo.Describe("Queue Validating Webhook E2E Test", func() {
 			},
 		}
 
-		createdQueue, err := testCtx.Vcclient.SchedulingV1beta1().Queues().Create(context.TODO(), queue, metav1.CreateOptions{})
+		_, err := testCtx.Vcclient.SchedulingV1beta1().Queues().Create(context.TODO(), queue, metav1.CreateOptions{})
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
-		// Update to Closed state
-		createdQueue.Status.State = schedulingv1beta1.QueueStateClosed
-		_, err = testCtx.Vcclient.SchedulingV1beta1().Queues().Update(context.TODO(), createdQueue, metav1.UpdateOptions{})
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		// Retry update with fresh object on conflict
+		var updateErr error
+		for retryCount := 0; retryCount < 5; retryCount++ {
+			// Fetch the latest version before updating
+			latestQueue, err := testCtx.Vcclient.SchedulingV1beta1().Queues().Get(context.TODO(), queueName, metav1.GetOptions{})
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+
+			// Update to Closed state
+			latestQueue.Status.State = schedulingv1beta1.QueueStateClosed
+
+			_, updateErr = testCtx.Vcclient.SchedulingV1beta1().Queues().Update(context.TODO(), latestQueue, metav1.UpdateOptions{})
+			// If we get a conflict, retry with fresh object
+			if errors.IsConflict(updateErr) {
+				continue
+			}
+			// For any other error or success, break
+			break
+		}
+
+		gomega.Expect(updateErr).NotTo(gomega.HaveOccurred())
 
 		// Cleanup
-		err = testCtx.Vcclient.SchedulingV1beta1().Queues().Delete(context.TODO(), queue.Name, metav1.DeleteOptions{})
+		err = testCtx.Vcclient.SchedulingV1beta1().Queues().Delete(context.TODO(), queueName, metav1.DeleteOptions{})
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	})
 
