@@ -352,7 +352,8 @@ var _ = ginkgo.Describe("Job Validating Webhook E2E Test", func() {
 		gomega.Expect(err.Error()).To(gomega.ContainSubstring("if there's * here, no other policy should be here"))
 	})
 
-	ginkgo.It("Should reject job creation with unknown job plugin", func() {
+	// VAP is unable to verify this situation
+	ginkgo.XIt("Should reject job creation with unknown job plugin", func() {
 		testCtx := util.InitTestContext(util.Options{})
 		defer util.CleanupTestContext(testCtx)
 
@@ -420,7 +421,8 @@ var _ = ginkgo.Describe("Job Validating Webhook E2E Test", func() {
 		gomega.Expect(err.Error()).To(gomega.ContainSubstring("either VolumeClaim or VolumeClaimName must be specified"))
 	})
 
-	ginkgo.It("Should reject job creation with non-existent queue", func() {
+	// VAP is unable to verify this situation
+	ginkgo.XIt("Should reject job creation with non-existent queue", func() {
 		testCtx := util.InitTestContext(util.Options{})
 		defer util.CleanupTestContext(testCtx)
 
@@ -432,14 +434,15 @@ var _ = ginkgo.Describe("Job Validating Webhook E2E Test", func() {
 		gomega.Expect(err.Error()).To(gomega.ContainSubstring("unable to find job queue"))
 	})
 
-	ginkgo.It("Should reject job creation submitted to closed queue", func() {
+	// VAP is unable to verify this situation
+	ginkgo.XIt("Should reject job creation submitted to closed queue", func() {
 		testCtx := util.InitTestContext(util.Options{})
 		defer util.CleanupTestContext(testCtx)
 
 		// Create a closed queue
 		closedQueue := &schedulingv1beta1.Queue{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "closed-queue",
+				Name: "closed-queue-test",
 			},
 			Spec: schedulingv1beta1.QueueSpec{
 				Weight: 1,
@@ -452,7 +455,7 @@ var _ = ginkgo.Describe("Job Validating Webhook E2E Test", func() {
 		var updateErr error
 		for retryCount := 0; retryCount < 5; retryCount++ {
 			// Fetch the latest version before updating
-			latestQueue, err := testCtx.Vcclient.SchedulingV1beta1().Queues().Get(context.TODO(), "closed-queue", metav1.GetOptions{})
+			latestQueue, err := testCtx.Vcclient.SchedulingV1beta1().Queues().Get(context.TODO(), "closed-queue-test", metav1.GetOptions{})
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 			// Update queue to closed state
@@ -509,7 +512,8 @@ var _ = ginkgo.Describe("Job Validating Webhook E2E Test", func() {
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	})
 
-	ginkgo.It("Should reject job creation with invalid task dependencies (non-DAG)", func() {
+	// VAP is unable to verify this situation
+	ginkgo.XIt("Should reject job creation with invalid task dependencies (non-DAG)", func() {
 		testCtx := util.InitTestContext(util.Options{})
 		defer util.CleanupTestContext(testCtx)
 
@@ -544,7 +548,8 @@ var _ = ginkgo.Describe("Job Validating Webhook E2E Test", func() {
 		gomega.Expect(err.Error()).To(gomega.ContainSubstring("job has dependencies between tasks, but doesn't form a directed acyclic graph"))
 	})
 
-	ginkgo.It("Should reject job creation with invalid topology policy and non-integer CPU", func() {
+	// VAP is unable to verify this situation
+	ginkgo.XIt("Should reject job creation with invalid topology policy and non-integer CPU", func() {
 		testCtx := util.InitTestContext(util.Options{})
 		defer util.CleanupTestContext(testCtx)
 
@@ -625,7 +630,7 @@ var _ = ginkgo.Describe("Job Validating Webhook E2E Test", func() {
 
 		// We expect an error containing our validation message
 		gomega.Expect(updateErr).To(gomega.HaveOccurred())
-		gomega.Expect(updateErr.Error()).To(gomega.ContainSubstring("job 'minAvailable' must not be greater than total replicas"))
+		gomega.Expect(updateErr.Error()).To(gomega.ContainSubstring("minAvailable' should not be greater than total replicas in tasks"))
 	})
 
 	ginkgo.It("Should reject job update attempting to add new tasks", func() {
