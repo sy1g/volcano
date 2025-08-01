@@ -31,6 +31,14 @@ export CLUSTER_CONTEXT=("--name" "${CLUSTER_NAME}")
 
 export KIND_OPT=${KIND_OPT:="--config ${VK_ROOT}/hack/e2e-kind-config.yaml"}
 
+function install-admission-policys {
+  echo "Installing AdmissionPolicy "
+  kubectl apply -f "pkg/webhooks/admission/hypernodes/policies/validating-admission-policy.yaml"
+  kubectl apply -f "pkg/webhooks/admission/pods/policies/validating-admission-policy.yaml"
+  kubectl apply -f "pkg/webhooks/admission/queues/policies/validating-admission-policy.yaml"
+  kubectl apply -f "pkg/webhooks/admission/jobflows/policies/validating-admission-policy.yaml"
+  kubectl apply -f "pkg/webhooks/admission/jobs/policies/validating-admission-policy.yaml"
+}
 
 function install-volcano {
   install-helm
@@ -87,7 +95,9 @@ custom:
   default_ns:
     node-role.kubernetes.io/control-plane: ""
   scheduler_feature_gates: ${FEATURE_GATES}
+  enabled_admissions: "/pods/mutate,/queues/mutate,/podgroups/mutate,/jobs/mutate,/podgroups/validate"
 EOF
+  install-admission-policys
 }
 
 function uninstall-volcano {
@@ -153,6 +163,7 @@ case ${E2E_TYPE} in
     KUBECONFIG=${KUBECONFIG} GOOS=${OS} ginkgo -r --slow-spec-threshold='30s' --progress ./test/e2e/schedulingaction/
     KUBECONFIG=${KUBECONFIG} GOOS=${OS} ginkgo -r --slow-spec-threshold='30s' --progress ./test/e2e/vcctl/
     KUBECONFIG=${KUBECONFIG} GOOS=${OS} ginkgo -r --slow-spec-threshold='30s' --progress --focus="DRA E2E Test" ./test/e2e/dra/
+    KUBECONFIG=${KUBECONFIG} GOOS=${OS} ginkgo -r --slow-spec-threshold='30s' --progress ./test/e2e/admission/
     ;;
 "JOBP")
     echo "Running parallel job e2e suite..."
@@ -181,6 +192,10 @@ case ${E2E_TYPE} in
 "DRA")
     echo "Running dra e2e suite..."
     KUBECONFIG=${KUBECONFIG} GOOS=${OS} ginkgo -v -r --slow-spec-threshold='30s' --progress --focus="DRA E2E Test" ./test/e2e/dra/
+    ;;
+"ADMISSION")
+    echo "Running admission webhook e2e suite..."
+    KUBECONFIG=${KUBECONFIG} GOOS=${OS} ginkgo -v -r --show-node-events ./test/e2e/admission/
     ;;
 esac
 
