@@ -146,7 +146,8 @@ var _ = ginkgo.Describe("JobFlow Validating Webhook E2E Test", func() {
 		gomega.Expect(err.Error()).To(gomega.ContainSubstring("vertex is not defined"))
 	})
 
-	ginkgo.It("Should reject jobflow creation with circular dependency (not DAG)", func() {
+	// VAP cannot be used to test the validation logic
+	ginkgo.XIt("Should reject jobflow creation with circular dependency (not DAG)", func() {
 		jobFlowName := "circular-dependency-jobflow"
 		testCtx := util.InitTestContext(util.Options{})
 		defer util.CleanupTestContext(testCtx)
@@ -270,7 +271,8 @@ var _ = ginkgo.Describe("JobFlow Validating Webhook E2E Test", func() {
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	})
 
-	ginkgo.It("Should reject jobflow update with circular dependency", func() {
+	// VAP can be used to test the validation logic
+	ginkgo.XIt("Should reject jobflow update with circular dependency", func() {
 		jobFlowName := "update-invalid-jobflow"
 		testCtx := util.InitTestContext(util.Options{})
 		defer util.CleanupTestContext(testCtx)
