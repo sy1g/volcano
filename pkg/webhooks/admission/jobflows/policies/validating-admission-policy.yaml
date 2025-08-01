@@ -1,4 +1,4 @@
-apiVersion: admissionregistration.k8s.io/v1beta1
+apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
   name: jobflow-validation-policy
@@ -8,28 +8,20 @@ metadata:
 spec:
   failurePolicy: Fail
   matchConstraints:
-  - resourceRules:
+    resourceRules:
     - operations: ["CREATE", "UPDATE"]
       apiGroups: ["flow.volcano.sh"]
       apiVersions: ["v1alpha1"]
       resources: ["jobflows"]
   variables:
+  # Extract flows from the jobflow spec
   - name: flows
     expression: "has(object.spec.flows) ? object.spec.flows : []"
+  # Extract flow names for validation
   - name: flowNames
     expression: "variables.flows.map(flow, flow.name)"
   validations:
-  # 1. Basic Structure Validation - At least one flow required
-  - expression: "size(variables.flows) > 0"
-    message: "JobFlow must have at least one flow"
-    reason: Invalid
-  
-  # 2. Flow Name Uniqueness - All flow names must be unique
-  - expression: "size(variables.flowNames) == size(variables.flowNames.unique())"
-    message: "JobFlow flow names must be unique"
-    reason: Invalid
-  
-  # 3. Flow Name Required - Each flow must have a non-empty name
+  # 1. Flow Name Required - Each flow must have a non-empty name
   - expression: |
       variables.flows.all(flow,
         has(flow.name) && size(flow.name) > 0
@@ -37,54 +29,27 @@ spec:
     message: "Each flow must have a non-empty name"
     reason: Invalid
   
-  # 4. Valid Dependency References - Dependencies must reference existing flows
+  # 2. Valid Dependency References - Dependencies must reference existing flows
   - expression: |
       variables.flows.all(flow,
         !has(flow.dependsOn) || 
         !has(flow.dependsOn.targets) ||
         flow.dependsOn.targets.all(target, target in variables.flowNames)
       )
-    message: "Flow dependencies must reference existing flow names"
+    message: "jobflow Flow is not DAG: vertex is not defined"
     reason: Invalid
   
-  # 5. No Self-Dependencies - A flow cannot depend on itself
+  # 3. No Self-Dependencies - A flow cannot depend on itself
   - expression: |
       variables.flows.all(flow,
         !has(flow.dependsOn) || 
         !has(flow.dependsOn.targets) ||
         !(flow.name in flow.dependsOn.targets)
       )
-    message: "Flow cannot depend on itself"
+    message: "jobflow Flow is not DAG"
     reason: Invalid
   
-  # 6. Direct Cycle Detection - Simple A->B->A cycle detection
-  - expression: |
-      variables.flows.all(flowA,
-        !has(flowA.dependsOn) || 
-        !has(flowA.dependsOn.targets) ||
-        !flowA.dependsOn.targets.exists(targetB,
-          variables.flows.exists(flowB,
-            flowB.name == targetB &&
-            has(flowB.dependsOn) &&
-            has(flowB.dependsOn.targets) &&
-            flowA.name in flowB.dependsOn.targets
-          )
-        )
-      )
-    message: "Direct circular dependencies detected between flows"
-    reason: Invalid
-  
-  # 7. Root Flow Validation - At least one flow must have no dependencies (root)
-  - expression: |
-      variables.flows.exists(flow,
-        !has(flow.dependsOn) || 
-        !has(flow.dependsOn.targets) ||
-        size(flow.dependsOn.targets) == 0
-      )
-    message: "JobFlow must have at least one root flow (flow with no dependencies)"
-    reason: Invalid
-  
-  # 8. Empty Dependency Targets Validation
+  # 4. Empty Dependency Targets Validation
   - expression: |
       variables.flows.all(flow,
         !has(flow.dependsOn) || 
@@ -94,8 +59,13 @@ spec:
     message: "Flow dependsOn.targets cannot be empty when dependsOn is specified"
     reason: Invalid
 
+  # Note: Complex DAG cycle detection (transitive cycles) is handled by 
+  # the validating webhook since CEL expressions cannot implement 
+  # full graph traversal algorithms. However, basic validations like
+  # missing references and self-dependencies can be handled here.
+
 ---
-apiVersion: admissionregistration.k8s.io/v1beta1
+apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
 metadata:
   name: jobflow-validation-policy-binding
@@ -104,10 +74,4 @@ metadata:
     volcano.sh/migration: vap
 spec:
   policyName: jobflow-validation-policy
-  validationActions: [Warn] # Start with Warn for gradual migration
-  matchResources:
-    namespaceSelector:
-      matchExpressions:
-      - key: name
-        operator: NotIn
-        values: ["kube-system", "kube-public", "kube-node-lease"]
+  validationActions: [Deny]
