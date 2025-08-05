@@ -38,6 +38,7 @@ function install-admission-policys {
   kubectl apply -f "pkg/webhooks/admission/queues/policies/validating-admission-policy.yaml"
   kubectl apply -f "pkg/webhooks/admission/jobflows/policies/validating-admission-policy.yaml"
   kubectl apply -f "pkg/webhooks/admission/jobs/policies/validating-admission-policy.yaml"
+  kubectl apply -f "pkg/webhooks/admission/podgroups/policies/validating-admission-policy.yaml"
 }
 
 function install-volcano {

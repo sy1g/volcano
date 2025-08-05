@@ -1,82 +1,130 @@
-apiVersion: admissionregistration.k8s.io/v1beta1
+apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
   name: podgroup-validation-policy
-  labels:
-    volcano.sh/component: podgroup-webhook
-    volcano.sh/migration: vap
-    volcano.sh/note: "Simplified validation - queue state checks require external validation"
 spec:
   failurePolicy: Fail
   matchConstraints:
-  - resourceRules:
-    - operations: ["CREATE", "UPDATE"]
-      apiGroups: ["scheduling.volcano.sh"]
-      apiVersions: ["v1beta1"]
-      resources: ["podgroups"]
+    resourceRules:
+      - operations: ["CREATE", "UPDATE"]
+        apiGroups: ["scheduling.volcano.sh"]
+        apiVersions: ["v1beta1"]
+        resources: ["podgroups"]
+  variables:
+    # Extract the queue name if specified
+    - name: queueName
+      expression: |
+        has(object.spec) && has(object.spec.queue) ? object.spec.queue : ""
+    # Extract minMember value
+    - name: minMember
+      expression: |
+        has(object.spec) && has(object.spec.minMember) ? object.spec.minMember : 0
+    # Extract maxMember value if specified
+    - name: maxMember
+      expression: |
+        has(object.spec) && has(object.spec.maxMember) ? object.spec.maxMember : 0
+    # Extract priorityClassName if specified
+    - name: priorityClassName
+      expression: |
+        has(object.spec) && has(object.spec.priorityClassName) ? object.spec.priorityClassName : ""
+    # Extract minTaskMember values if specified
+    - name: minTaskMember
+      expression: |
+        has(object.spec) && has(object.spec.minTaskMember) ? object.spec.minTaskMember : {}
+    # Extract minResources if specified
+    - name: minResources
+      expression: |
+        has(object.spec) && has(object.spec.minResources) ? object.spec.minResources : {}
+    # Extract networkTopology if specified
+    - name: networkTopology
+      expression: |
+        has(object.spec) && has(object.spec.networkTopology) ? object.spec.networkTopology : {}
   validations:
-  # 1. MinMember Validation - Must be positive
-  - expression: "!has(object.spec.minMember) || object.spec.minMember > 0"
-    message: "PodGroup minMember must be greater than 0"
-    reason: Invalid
-  
-  # 2. MaxMember Validation - Must be >= MinMember
-  - expression: |
-      !has(object.spec.maxMember) || 
-      !has(object.spec.minMember) ||
-      object.spec.maxMember >= object.spec.minMember
-    message: "PodGroup maxMember must be greater than or equal to minMember"
-    reason: Invalid
-  
-  # 3. Queue Name Format Validation
-  - expression: |
-      !has(object.spec.queue) || 
-      (size(object.spec.queue) > 0 && 
-       object.spec.queue.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'))
-    message: "Queue name must be a valid Kubernetes name (lowercase alphanumeric with hyphens)"
-    reason: Invalid
-  
-  # 4. Priority Validation
-  - expression: |
-      !has(object.spec.priority) || 
-      (object.spec.priority >= -2147483648 && object.spec.priority <= 2147483647)
-    message: "Priority must be a valid 32-bit integer"
-    reason: Invalid
-  
-  # 5. PriorityClassName Format Validation
-  - expression: |
-      !has(object.spec.priorityClassName) || 
-      (size(object.spec.priorityClassName) > 0 && 
-       object.spec.priorityClassName.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'))
-    message: "PriorityClassName must be a valid Kubernetes name"
-    reason: Invalid
-  
-  # 6. Name and Namespace Validation
-  - expression: |
-      has(object.metadata.name) && size(object.metadata.name) > 0 &&
-      has(object.metadata.namespace) && size(object.metadata.namespace) > 0
-    message: "PodGroup must have non-empty name and namespace"
-    reason: Invalid
-  
-  # 7. Basic Resource Request Validation
-  - expression: |
-      !has(object.spec.minResources) ||
-      !has(object.spec.minResources.requests) ||
-      object.spec.minResources.requests.all(resource, 
-        resource.value().matches('^[0-9]+(\\.[0-9]*)?[mMkKGTPEi]*$')
-      )
-    message: "Resource requests must be valid Kubernetes resource quantities"
-    reason: Invalid
-  
-  # Note: Queue state validation (queue existence and open state) cannot be 
-  # implemented in CEL due to lack of external API access.
-  # This validation should be moved to:
-  # 1. A separate controller-based validation system
-  # 2. OPA Gatekeeper with external data providers
-  # 3. A simplified webhook that only handles queue state validation
+    # Validate minMember - must be positive integer
+    - expression: |
+        !has(object.spec) || !has(object.spec.minMember) || object.spec.minMember > 0
+      message: "minMember must be a positive integer"
+      reason: Invalid
+    # Validate maxMember - if specified, must be greater than or equal to minMember
+    - expression: |
+        !has(object.spec) || !has(object.spec.maxMember) || 
+        !has(object.spec.minMember) || 
+        object.spec.maxMember >= object.spec.minMember
+      message: "maxMember must be greater than or equal to minMember"
+      reason: Invalid
+    # Validate queue name format - if specified, must not be empty and follow naming conventions
+    - expression: |
+        variables.queueName == "" || 
+        (variables.queueName.size() > 0 && 
+         variables.queueName.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$') &&
+         variables.queueName.size() <= 63)
+      message: "queue name must follow Kubernetes naming conventions (lowercase alphanumeric characters or '-', start and end with alphanumeric character, max 63 characters)"
+      reason: Invalid
+    # Validate priorityClassName format - if specified, must not be empty and follow naming conventions
+    - expression: |
+        variables.priorityClassName == "" || 
+        (variables.priorityClassName.size() > 0 && 
+         variables.priorityClassName.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$') &&
+         variables.priorityClassName.size() <= 63)
+      message: "priorityClassName must follow Kubernetes naming conventions (lowercase alphanumeric characters or '-', start and end with alphanumeric character, max 63 characters)"
+      reason: Invalid
+    # Validate that PodGroup name follows naming conventions
+    - expression: |
+        has(object.metadata) && has(object.metadata.name) &&
+        object.metadata.name.size() > 0 && 
+        object.metadata.name.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$') &&
+        object.metadata.name.size() <= 63
+      message: "PodGroup name must follow Kubernetes naming conventions (lowercase alphanumeric characters or '-', start and end with alphanumeric character, max 63 characters)"
+      reason: Invalid
+    # Validate namespace is specified for namespaced resources
+    - expression: |
+        has(object.metadata) && has(object.metadata.namespace) &&
+        object.metadata.namespace.size() > 0
+      message: "namespace must be specified for PodGroup"
+      reason: Invalid
+    # Validate minTaskMember - all values must be positive integers
+    - expression: |
+        size(variables.minTaskMember) == 0 || 
+        variables.minTaskMember.all(k, variables.minTaskMember[k] > 0)
+      message: "all minTaskMember values must be positive integers"
+      reason: Invalid
+    # Validate minResources - ensure resource values are not empty when defined
+    - expression: |
+        size(variables.minResources) == 0 || 
+        variables.minResources.all(k, variables.minResources[k] != "")
+      message: "minResources values must not be empty"
+      reason: Invalid
+    # Validate networkTopology mode if specified
+    - expression: |
+        !has(variables.networkTopology.mode) ||
+        variables.networkTopology.mode in ["Strict", "Preferred"]
+      message: "networkTopology mode must be either 'Strict' or 'Preferred'"
+      reason: Invalid
+    # Validate networkTopology highestTierAllowed if specified
+    - expression: |
+        !has(variables.networkTopology.highestTierAllowed) ||
+        variables.networkTopology.highestTierAllowed >= 0
+      message: "networkTopology highestTierAllowed must be non-negative"
+      reason: Invalid
+    # Validate UPDATE operations - prevent changing queue name after creation
+    - expression: |
+        request.operation != "UPDATE" || 
+        !has(oldObject.spec) || !has(oldObject.spec.queue) || 
+        !has(object.spec) || !has(object.spec.queue) || 
+        oldObject.spec.queue == object.spec.queue
+      message: "queue name cannot be changed after PodGroup creation"
+      reason: Invalid
+    # Validate UPDATE operations - prevent changing minMember to smaller value
+    - expression: |
+        request.operation != "UPDATE" || 
+        !has(oldObject.spec) || !has(oldObject.spec.minMember) || 
+        !has(object.spec) || !has(object.spec.minMember) || 
+        object.spec.minMember >= oldObject.spec.minMember
+      message: "minMember cannot be decreased during update"
+      reason: Invalid
 
 ---
-apiVersion: admissionregistration.k8s.io/v1beta1
+apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
 metadata:
   name: podgroup-validation-policy-binding
@@ -85,10 +133,10 @@ metadata:
     volcano.sh/migration: vap
 spec:
   policyName: podgroup-validation-policy
-  validationActions: [Warn] # Start with Warn for gradual migration
+  validationActions: [Deny]
   matchResources:
-    namespaceSelector:
-      matchExpressions:
-      - key: name
-        operator: NotIn
-        values: ["kube-system", "kube-public", "kube-node-lease"]
+    resourceRules:
+      - operations: ["CREATE", "UPDATE"]
+        apiGroups: ["scheduling.volcano.sh"]
+        apiVersions: ["v1beta1"]
+        resources: ["podgroups"]
