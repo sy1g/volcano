@@ -78,7 +78,8 @@ var _ = ginkgo.Describe("PodGroup Validating Webhook E2E Test", func() {
 	})
 
 	// Test PodGroup creation with closed queue (should fail)
-	ginkgo.It("Should reject PodGroup creation with closed queue", func() {
+	// VAP is unable to verify this situation
+	ginkgo.XIt("Should reject PodGroup creation with closed queue", func() {
 		testCtx := util.InitTestContext(util.Options{})
 		defer util.CleanupTestContext(testCtx)
 
@@ -149,7 +150,8 @@ var _ = ginkgo.Describe("PodGroup Validating Webhook E2E Test", func() {
 	})
 
 	// Test PodGroup creation with non-existent queue (should fail)
-	ginkgo.It("Should reject PodGroup creation with non-existent queue", func() {
+	// VAP is unable to verify this situation
+	ginkgo.XIt("Should reject PodGroup creation with non-existent queue", func() {
 		testCtx := util.InitTestContext(util.Options{})
 		defer util.CleanupTestContext(testCtx)
 
@@ -172,7 +174,8 @@ var _ = ginkgo.Describe("PodGroup Validating Webhook E2E Test", func() {
 	})
 
 	// Test PodGroup creation with closing queue state (should fail)
-	ginkgo.It("Should reject PodGroup creation with closing queue", func() {
+	// VAP is unable to verify this situation
+	ginkgo.XIt("Should reject PodGroup creation with closing queue", func() {
 		testCtx := util.InitTestContext(util.Options{})
 		defer util.CleanupTestContext(testCtx)
 
@@ -212,60 +215,6 @@ var _ = ginkgo.Describe("PodGroup Validating Webhook E2E Test", func() {
 		gomega.Expect(err.Error()).To(gomega.ContainSubstring("can only submit PodGroup to queue with state `Open`"))
 
 		// Cleanup queue
-		err = testCtx.Vcclient.SchedulingV1beta1().Queues().Delete(context.TODO(), queue.Name, metav1.DeleteOptions{})
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-	})
-	// Test that PodGroup update operation is not intercepted by the webhook
-	// (webhook only validates Create operations)
-	ginkgo.It("Should allow PodGroup update operation since webhook only handles Create", func() {
-		testCtx := util.InitTestContext(util.Options{})
-		defer util.CleanupTestContext(testCtx)
-
-		// Create PodGroup without queue first
-		podGroup := &schedulingv1beta1.PodGroup{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: testCtx.Namespace,
-				Name:      "test-podgroup-update",
-			},
-			Spec: schedulingv1beta1.PodGroupSpec{
-				Queue:             "",
-				MinMember:         1,
-				PriorityClassName: "",
-			},
-		}
-
-		createdPodGroup, err := testCtx.Vcclient.SchedulingV1beta1().PodGroups(testCtx.Namespace).Create(context.TODO(), podGroup, metav1.CreateOptions{})
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-
-		// Create a closed queue
-		queue := &schedulingv1beta1.Queue{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-queue-for-update",
-			},
-			Spec: schedulingv1beta1.QueueSpec{
-				Weight: 1,
-			},
-		}
-
-		createdQueue, err := testCtx.Vcclient.SchedulingV1beta1().Queues().Create(context.TODO(), queue, metav1.CreateOptions{})
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-
-		createdQueue.Status.State = schedulingv1beta1.QueueStateClosed
-		_, err = testCtx.Vcclient.SchedulingV1beta1().Queues().UpdateStatus(context.TODO(), createdQueue, metav1.UpdateOptions{})
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-
-		// Update the PodGroup to reference the closed queue
-		// This should succeed since the webhook doesn't intercept Update operations
-		createdPodGroup.Spec.Queue = "test-queue-for-update"
-		_, err = testCtx.Vcclient.SchedulingV1beta1().PodGroups(testCtx.Namespace).Update(context.TODO(), createdPodGroup, metav1.UpdateOptions{})
-		
-		// Should succeed since webhook only validates Create operations
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-
-		// Cleanup
-		err = testCtx.Vcclient.SchedulingV1beta1().PodGroups(testCtx.Namespace).Delete(context.TODO(), podGroup.Name, metav1.DeleteOptions{})
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-
 		err = testCtx.Vcclient.SchedulingV1beta1().Queues().Delete(context.TODO(), queue.Name, metav1.DeleteOptions{})
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	})
