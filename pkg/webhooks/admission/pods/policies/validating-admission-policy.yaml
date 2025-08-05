@@ -6,52 +6,51 @@ spec:
   failurePolicy: Fail
   matchConstraints:
     resourceRules:
-    - operations: ["CREATE"]
-      apiGroups: [""]
-      apiVersions: ["v1"]
-      resources: ["pods"]
+      - operations: ["CREATE"]
+        apiGroups: [""]
+        apiVersions: ["v1"]
+        resources: ["pods"]
   variables:
-  - name: volcanoScheduler
-    expression: |
-      has(object.spec.schedulerName) && object.spec.schedulerName == "volcano"
+    - name: volcanoScheduler
+      expression: |
+        has(object.spec.schedulerName) && object.spec.schedulerName == "volcano"
   validations:
-  # not allow configure multiple annotations at same time
-  - expression: |
-      !variables.volcanoScheduler || !(type(object.metadata.annotations) == map) || !has(object.metadata.annotations) || !(
-        ("volcano.sh/jdb-min-available" in object.metadata.annotations) &&
-        ("volcano.sh/jdb-max-unavailable" in object.metadata.annotations)
-      ) 
-    message: "not allow configure multiple annotations at same time"
-    reason: Invalid
-  # not allow negative values for jdb-min-available
-  - expression: |
-      !variables.volcanoScheduler || !(type(object.metadata.annotations) == map) || !has(object.metadata.annotations) || !("volcano.sh/jdb-min-available" in object.metadata.annotations) ||
-      (
-        object.metadata.annotations["volcano.sh/jdb-min-available"].matches('^[0-9]+$') &&
-        int(object.metadata.annotations["volcano.sh/jdb-min-available"]) > 0
-      ) ||
-      (
-        object.metadata.annotations["volcano.sh/jdb-min-available"].matches('^[0-9]+%$') &&
-        int(object.metadata.annotations["volcano.sh/jdb-min-available"].replace('%', '')) > 0 &&
-        int(object.metadata.annotations["volcano.sh/jdb-min-available"].replace('%', '')) < 100
-      )
-    message: "jdb-min-available must be a positive integer or a valid percentage which between 1% ~ 99%"
-    reason: Invalid
-  # not allow negative values for jdb-max-unavailable
-  - expression: |
-      !variables.volcanoScheduler || !(type(object.metadata.annotations) == map) || !has(object.metadata.annotations) || !("volcano.sh/jdb-max-unavailable" in object.metadata.annotations) ||
-      (
-        object.metadata.annotations["volcano.sh/jdb-max-unavailable"].matches('^[0-9]+$') &&
-        int(object.metadata.annotations["volcano.sh/jdb-max-unavailable"]) > 0
-      ) ||
-      (
-        object.metadata.annotations["volcano.sh/jdb-max-unavailable"].matches('^[0-9]+%$') &&
-        int(object.metadata.annotations["volcano.sh/jdb-max-unavailable"].replace('%', '')) > 0 &&
-        int(object.metadata.annotations["volcano.sh/jdb-max-unavailable"].replace('%', '')) < 100
-      )
-    message: "jdb-max-unavailable must be a positive integer or a valid percentage which between 1% ~ 99%"
-    reason: Invalid
-
+    # not allow configure multiple annotations at same time
+    - expression: |
+        !variables.volcanoScheduler || !(type(object.metadata.annotations) == map) || !has(object.metadata.annotations) || !(
+          ("volcano.sh/jdb-min-available" in object.metadata.annotations) &&
+          ("volcano.sh/jdb-max-unavailable" in object.metadata.annotations)
+        )
+      message: "not allow configure multiple annotations at same time"
+      reason: Invalid
+    # not allow negative values for jdb-min-available
+    - expression: |
+        !variables.volcanoScheduler || !(type(object.metadata.annotations) == map) || !has(object.metadata.annotations) || !("volcano.sh/jdb-min-available" in object.metadata.annotations) ||
+        (
+          object.metadata.annotations["volcano.sh/jdb-min-available"].matches('^[0-9]+$') &&
+          int(object.metadata.annotations["volcano.sh/jdb-min-available"]) > 0
+        ) ||
+        (
+          object.metadata.annotations["volcano.sh/jdb-min-available"].matches('^[0-9]+%$') &&
+          int(object.metadata.annotations["volcano.sh/jdb-min-available"].replace('%', '')) > 0 &&
+          int(object.metadata.annotations["volcano.sh/jdb-min-available"].replace('%', '')) < 100
+        )
+      message: "jdb-min-available must be a positive integer or a valid percentage which between 1% ~ 99%"
+      reason: Invalid
+    # not allow negative values for jdb-max-unavailable
+    - expression: |
+        !variables.volcanoScheduler || !(type(object.metadata.annotations) == map) || !has(object.metadata.annotations) || !("volcano.sh/jdb-max-unavailable" in object.metadata.annotations) ||
+        (
+          object.metadata.annotations["volcano.sh/jdb-max-unavailable"].matches('^[0-9]+$') &&
+          int(object.metadata.annotations["volcano.sh/jdb-max-unavailable"]) > 0
+        ) ||
+        (
+          object.metadata.annotations["volcano.sh/jdb-max-unavailable"].matches('^[0-9]+%$') &&
+          int(object.metadata.annotations["volcano.sh/jdb-max-unavailable"].replace('%', '')) > 0 &&
+          int(object.metadata.annotations["volcano.sh/jdb-max-unavailable"].replace('%', '')) < 100
+        )
+      message: "jdb-max-unavailable must be a positive integer or a valid percentage which between 1% ~ 99%"
+      reason: Invalid
 
 ---
 apiVersion: admissionregistration.k8s.io/v1
@@ -67,6 +66,6 @@ spec:
   matchResources:
     namespaceSelector:
       matchExpressions:
-      - key: name
-        operator: NotIn
-        values: ["kube-system", "kube-public", "kube-node-lease"]
+        - key: name
+          operator: NotIn
+          values: ["kube-system", "kube-public", "kube-node-lease"]

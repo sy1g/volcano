@@ -43,14 +43,14 @@ spec:
         has(object.spec) && has(object.spec.members) && size(object.spec.members) > 0
       message: "member must have at least one member"
       reason: Invalid
-    
+
     # Validate that each member has exactly one selector type
     - expression: |
         !has(object.spec) || !has(object.spec.members) || size(object.spec.members) == 0 ||
         variables.membersWithSelectorCounts.all(count, count == 1)
       message: "member selector must have exactly one of exactMatch, regexMatch, or labelMatch"
       reason: Invalid
-    
+
     # Validate exactMatch names are not empty
     - expression: |
         !has(object.spec) || !has(object.spec.members) || size(object.spec.members) == 0 ||
@@ -59,7 +59,7 @@ spec:
           .all(member, member.selector.exactMatch.name != "")
       message: "member exactMatch name is required"
       reason: Invalid
-    
+
     # Validate exactMatch names follow DNS naming conventions (qualified name validation)
     - expression: |
         !has(object.spec) || !has(object.spec.members) || size(object.spec.members) == 0 ||
@@ -69,7 +69,7 @@ spec:
         )
       message: "member exactMatch validate failed [name part must consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character]"
       reason: Invalid
-    
+
     # Validate regexMatch patterns are not empty
     - expression: |
         !has(object.spec) || !has(object.spec.members) || size(object.spec.members) == 0 || 
@@ -78,10 +78,10 @@ spec:
           .all(member, member.selector.regexMatch.pattern != "")
       message: "member regexMatch pattern is required"
       reason: Invalid
-    
+
     # Basic regex pattern validation - check for common invalid patterns
     # Note: CEL doesn't have full regex compilation support, so we do basic checks
-    
+
     # Check for unmatched parentheses
     - expression: |
         !has(object.spec) || !has(object.spec.members) || size(object.spec.members) == 0 ||
@@ -91,7 +91,7 @@ spec:
         )
       message: "member regexMatch pattern is invalid: unmatched parentheses"
       reason: Invalid
-    
+
     # Check for unmatched square brackets
     - expression: |
         !has(object.spec) || !has(object.spec.members) || size(object.spec.members) == 0 ||
@@ -101,7 +101,7 @@ spec:
         )
       message: "member regexMatch pattern is invalid: unmatched square brackets"
       reason: Invalid
-    
+
     # Check for unmatched curly braces
     - expression: |
         !has(object.spec) || !has(object.spec.members) || size(object.spec.members) == 0 ||

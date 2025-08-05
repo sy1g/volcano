@@ -56,7 +56,7 @@ spec:
         !has(object.spec) || !has(object.spec.minAvailable) || object.spec.minAvailable >= 0
       message: "job 'minAvailable' must be >= 0"
       reason: Invalid
-    # Validate maxRetry >= 0  
+    # Validate maxRetry >= 0
     - expression: |
         !has(object.spec) || !has(object.spec.maxRetry) || object.spec.maxRetry >= 0
       message: "'maxRetry' cannot be less than zero"
@@ -174,7 +174,7 @@ spec:
         object.spec.policies.filter(policy, has(policy.exitCode)).all(policy1,
           object.spec.policies.filter(policy2, has(policy2.exitCode) && policy2.exitCode == policy1.exitCode).size() == 1
         )
-      message: "duplicate exitCode found" 
+      message: "duplicate exitCode found"
       reason: Invalid
     # Validate AnyEvent (*) policy restrictions
     - expression: |
