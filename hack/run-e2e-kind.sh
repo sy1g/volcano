@@ -35,6 +35,7 @@ function install-admission-policys {
   echo "Installing AdmissionPolicy "
   kubectl apply -f "pkg/webhooks/admission/hypernodes/policies/validating-admission-policy.yaml"
   kubectl apply -f "pkg/webhooks/admission/jobs/policies/validating-admission-policy.yaml"
+  kubectl apply -f "pkg/webhooks/admission/jobs/policies/mutating-admission-policy.yaml"
   kubectl apply -f "pkg/webhooks/admission/jobflows/policies/validating-admission-policy.yaml"
   kubectl apply -f "pkg/webhooks/admission/pods/policies/validating-admission-policy.yaml"
   kubectl apply -f "pkg/webhooks/admission/podgroups/policies/validating-admission-policy.yaml"
