@@ -64,7 +64,7 @@ var _ = ginkgo.Describe("Queue Validating Webhook E2E Test", func() {
 
 		queue := &schedulingv1beta1.Queue{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-queue-closed",
+				Name: "test-queue-closed-queue",
 			},
 			Spec: schedulingv1beta1.QueueSpec{
 				Weight: 1,
