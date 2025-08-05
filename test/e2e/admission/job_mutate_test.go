@@ -32,8 +32,8 @@ import (
 const (
 	defaultQueue     = "default"
 	defaultMaxRetry  = int32(3)
-	defaultTaskSpec0 = "task-0"
-	defaultTaskSpec1 = "task-1"
+	defaultTaskSpec0 = "default0"
+	defaultTaskSpec1 = "default1"
 )
 
 var _ = ginkgo.Describe("Job Mutating Webhook E2E Test", func() {
