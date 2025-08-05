@@ -92,7 +92,7 @@ spec:
     # Validate task replicas >= 0
     - expression: |
         !has(object.spec) || !has(object.spec.tasks) ||
-        object.spec.tasks.all(task, task.replicas >= 0)
+        object.spec.tasks.all(task, !has(task.replicas) || task.replicas >= 0)
       message: "'replicas' < 0 in task"
       reason: Invalid
     # Validate task minAvailable >= 0 when specified
@@ -107,7 +107,7 @@ spec:
     - expression: |
         !has(object.spec) || !has(object.spec.tasks) ||
         object.spec.tasks.all(task, 
-          !has(task.minAvailable) || task.minAvailable <= task.replicas
+          !has(task.minAvailable) || !has(task.replicas) || task.minAvailable <= task.replicas
         )
       message: "'minAvailable' is greater than 'replicas' in task"
       reason: Invalid
@@ -148,7 +148,7 @@ spec:
     - expression: |
         !has(object.spec) || !has(object.spec.policies) ||
         object.spec.policies.all(policy, 
-          has(policy.event) || has(policy.exitCode)
+          has(policy.event) || has(policy.exitCode) || (has(policy.events) && size(policy.events) > 0)
         )
       message: "either event and exitCode should be specified"
       reason: Invalid
