@@ -1,0 +1,242 @@
+apiVersion: admissionregistration.k8s.io/v1alpha1
+kind: MutatingAdmissionPolicy
+metadata:
+  name: volcano-job-mutation-policy
+spec:
+  failurePolicy: Fail
+  reinvocationPolicy: Never
+  matchConstraints:
+    resourceRules:
+    - operations: ["CREATE"]
+      apiGroups: ["batch.volcano.sh"]
+      apiVersions: ["v1alpha1"]
+      resources: ["jobs"]
+  mutations:
+  # Set default queue
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        !has(object.spec.queue) || object.spec.queue == "" ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/queue",
+          value: "default"
+        }] : []
+  
+  # Set default schedulerName  
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        !has(object.spec.schedulerName) || object.spec.schedulerName == "" ?
+        [JSONPatch{
+          op: "add", 
+          path: "/spec/schedulerName",
+          value: "volcano"
+        }] : []
+  
+  # Set default maxRetry
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        !has(object.spec.maxRetry) || object.spec.maxRetry == 0 ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/maxRetry", 
+          value: 3
+        }] : []
+  
+  # Set default minAvailable
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        !has(object.spec.minAvailable) || object.spec.minAvailable == 0 ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/minAvailable",
+          value: object.spec.tasks.map(task, 
+            has(task.minAvailable) && task.minAvailable != null ? 
+            task.minAvailable : task.replicas
+          ).sum()
+        }] : []
+
+  # Set default task names - use individual patches for each task
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        has(object.spec.tasks) && size(object.spec.tasks) > 0 && 
+        (!has(object.spec.tasks[0].name) || object.spec.tasks[0].name == "") ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/tasks/0/name", 
+          value: "default0"
+        }] : []
+
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        has(object.spec.tasks) && size(object.spec.tasks) > 1 && 
+        (!has(object.spec.tasks[1].name) || object.spec.tasks[1].name == "") ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/tasks/1/name", 
+          value: "default1"
+        }] : []
+
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        has(object.spec.tasks) && size(object.spec.tasks) > 2 && 
+        (!has(object.spec.tasks[2].name) || object.spec.tasks[2].name == "") ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/tasks/2/name", 
+          value: "default2"
+        }] : []
+
+  # Set default task minAvailable
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        has(object.spec.tasks) && size(object.spec.tasks) > 0 && 
+        !has(object.spec.tasks[0].minAvailable) ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/tasks/0/minAvailable",
+          value: object.spec.tasks[0].replicas
+        }] : []
+
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        has(object.spec.tasks) && size(object.spec.tasks) > 1 && 
+        !has(object.spec.tasks[1].minAvailable) ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/tasks/1/minAvailable",
+          value: object.spec.tasks[1].replicas
+        }] : []
+
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        has(object.spec.tasks) && size(object.spec.tasks) > 2 && 
+        !has(object.spec.tasks[2].minAvailable) ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/tasks/2/minAvailable",
+          value: object.spec.tasks[2].replicas
+        }] : []
+
+  # Set default task maxRetry
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        has(object.spec.tasks) && size(object.spec.tasks) > 0 && 
+        (!has(object.spec.tasks[0].maxRetry) || object.spec.tasks[0].maxRetry == 0) ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/tasks/0/maxRetry",
+          value: 3
+        }] : []
+
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        has(object.spec.tasks) && size(object.spec.tasks) > 1 && 
+        (!has(object.spec.tasks[1].maxRetry) || object.spec.tasks[1].maxRetry == 0) ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/tasks/1/maxRetry",
+          value: 3
+        }] : []
+
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        has(object.spec.tasks) && size(object.spec.tasks) > 2 && 
+        (!has(object.spec.tasks[2].maxRetry) || object.spec.tasks[2].maxRetry == 0) ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/tasks/2/maxRetry",
+          value: 3
+        }] : []
+
+  # Set DNSPolicy for hostNetwork tasks
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        has(object.spec.tasks) && size(object.spec.tasks) > 0 && 
+        has(object.spec.tasks[0].template.spec.hostNetwork) && 
+        object.spec.tasks[0].template.spec.hostNetwork &&
+        (!has(object.spec.tasks[0].template.spec.dnsPolicy) || object.spec.tasks[0].template.spec.dnsPolicy == "") ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/tasks/0/template/spec/dnsPolicy",
+          value: "ClusterFirstWithHostNet"
+        }] : []
+
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        has(object.spec.tasks) && size(object.spec.tasks) > 1 && 
+        has(object.spec.tasks[1].template.spec.hostNetwork) && 
+        object.spec.tasks[1].template.spec.hostNetwork &&
+        (!has(object.spec.tasks[1].template.spec.dnsPolicy) || object.spec.tasks[1].template.spec.dnsPolicy == "") ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/tasks/1/template/spec/dnsPolicy",
+          value: "ClusterFirstWithHostNet"
+        }] : []
+
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        has(object.spec.tasks) && size(object.spec.tasks) > 2 && 
+        has(object.spec.tasks[2].template.spec.hostNetwork) && 
+        object.spec.tasks[2].template.spec.hostNetwork &&
+        (!has(object.spec.tasks[2].template.spec.dnsPolicy) || object.spec.tasks[2].template.spec.dnsPolicy == "") ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/tasks/2/template/spec/dnsPolicy",
+          value: "ClusterFirstWithHostNet"
+        }] : []
+
+  # Add svc plugin for distributed frameworks
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        has(object.spec.plugins) && (
+          has(object.spec.plugins.tensorflow) || 
+          has(object.spec.plugins.mpi) || 
+          has(object.spec.plugins.pytorch)
+        ) && !has(object.spec.plugins.svc) ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/plugins/svc",
+          value: []
+        }] : []
+
+  # Add ssh plugin for mpi jobs
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        has(object.spec.plugins) && has(object.spec.plugins.mpi) && 
+        !has(object.spec.plugins.ssh) ?
+        [JSONPatch{
+          op: "add", 
+          path: "/spec/plugins/ssh",
+          value: []
+        }] : []
+---
+apiVersion: admissionregistration.k8s.io/v1alpha1
+kind: MutatingAdmissionPolicyBinding
+metadata:
+  name: volcano-job-mutation-binding
+spec:
+  policyName: volcano-job-mutation-policy
+  matchResources:
+    resourceRules:
+    - operations: ["CREATE"]
+      apiGroups: ["batch.volcano.sh"] 
+      apiVersions: ["v1alpha1"]
+      resources: ["jobs"]
