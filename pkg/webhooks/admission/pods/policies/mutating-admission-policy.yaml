@@ -1,0 +1,132 @@
+apiVersion: admissionregistration.k8s.io/v1alpha1
+kind: MutatingAdmissionPolicy
+metadata:
+  name: volcano-pod-mutation-policy
+spec:
+  failurePolicy: Fail
+  reinvocationPolicy: Never
+  paramKind:
+    apiVersion: v1
+    kind: ConfigMap
+  matchConstraints:
+    resourceRules:
+    - operations: ["CREATE"]
+      apiGroups: [""]
+      apiVersions: ["v1"]
+      resources: ["pods"]
+  
+  mutations:
+  # Patch node selector for management namespace pods
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        (object.metadata.namespace == "mng-ns-1" || object.metadata.namespace == "mng-ns-2") &&
+        has(params.data) && "management-labels" in params.data ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/nodeSelector",
+          value: {"volcano.sh/nodetype": params.data["management-labels"]}
+        }] : []
+
+  # Patch scheduler name for management namespace pods
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        (object.metadata.namespace == "mng-ns-1" || object.metadata.namespace == "mng-ns-2") &&
+        has(params.data) && "management-scheduler" in params.data ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/schedulerName",
+          value: params.data["management-scheduler"]
+        }] : []
+
+  # Patch node selector for CPU annotation pods
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        has(object.metadata.annotations) &&
+        "volcano.sh/resource-group" in object.metadata.annotations &&
+        object.metadata.annotations["volcano.sh/resource-group"] == "cpu" &&
+        has(params.data) && "cpu-labels" in params.data ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/nodeSelector",
+          value: {"volcano.sh/nodetype": params.data["cpu-labels"]}
+        }] : []
+
+  # Patch scheduler name for CPU annotation pods
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        has(object.metadata.annotations) &&
+        "volcano.sh/resource-group" in object.metadata.annotations &&
+        object.metadata.annotations["volcano.sh/resource-group"] == "cpu" &&
+        has(params.data) && "cpu-scheduler" in params.data ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/schedulerName",
+          value: params.data["cpu-scheduler"]
+        }] : []
+
+  # Patch node selector for GPU annotation pods
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        has(object.metadata.annotations) &&
+        "volcano.sh/resource-group" in object.metadata.annotations &&
+        object.metadata.annotations["volcano.sh/resource-group"] == "gpu" &&
+        has(params.data) && "gpu-labels" in params.data ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/nodeSelector",
+          value: {"volcano.sh/nodetype": params.data["gpu-labels"]}
+        }] : []
+
+  # Patch scheduler name for GPU annotation pods
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        has(object.metadata.annotations) &&
+        "volcano.sh/resource-group" in object.metadata.annotations &&
+        object.metadata.annotations["volcano.sh/resource-group"] == "gpu" &&
+        has(params.data) && "gpu-scheduler" in params.data ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/schedulerName",
+          value: params.data["gpu-scheduler"]
+        }] : []
+
+---
+apiVersion: admissionregistration.k8s.io/v1alpha1
+kind: MutatingAdmissionPolicyBinding
+metadata:
+  name: volcano-pod-mutation-binding
+spec:
+  policyName: volcano-pod-mutation-policy
+  paramRef:
+    name: volcano-pod-mutation-config
+    namespace: volcano-system
+  matchResources:
+    resourceRules:
+    - operations: ["CREATE"]
+      apiGroups: [""]
+      apiVersions: ["v1"]
+      resources: ["pods"]
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: volcano-pod-mutation-config
+  namespace: volcano-system
+data:
+  # Management namespace configuration
+  management-labels: "management"
+  management-scheduler: "default-scheduler"
+  
+  # CPU resource group configuration  
+  cpu-labels: "cpu"
+  cpu-scheduler: "volcano"
+  
+  # GPU resource group configuration
+  gpu-labels: "gpu"
+  gpu-scheduler: "volcano"

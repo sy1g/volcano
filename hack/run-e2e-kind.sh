@@ -38,6 +38,7 @@ function install-admission-policys {
   kubectl apply -f "pkg/webhooks/admission/jobs/policies/mutating-admission-policy.yaml"
   kubectl apply -f "pkg/webhooks/admission/jobflows/policies/validating-admission-policy.yaml"
   kubectl apply -f "pkg/webhooks/admission/pods/policies/validating-admission-policy.yaml"
+  kubectl apply -f "pkg/webhooks/admission/pods/policies/mutating-admission-policy.yaml"
   kubectl apply -f "pkg/webhooks/admission/podgroups/policies/validating-admission-policy.yaml"
   kubectl apply -f "pkg/webhooks/admission/queues/policies/validating-admission-policy.yaml"
 }
@@ -199,6 +200,7 @@ case ${E2E_TYPE} in
     echo "Running admission webhook e2e suite..."
     # KUBECONFIG=${KUBECONFIG} GOOS=${OS} ginkgo -v -r -nodes=10 --slow-spec-threshold='30s' --progress ./test/e2e/admission/
     KUBECONFIG=${KUBECONFIG} GOOS=${OS} ginkgo -v -r --slow-spec-threshold='30s' --progress ./test/e2e/admission/
+    sleep 500000
     ;;
 esac
 
