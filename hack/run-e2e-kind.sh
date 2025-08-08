@@ -98,7 +98,7 @@ custom:
   default_ns:
     node-role.kubernetes.io/control-plane: ""
   scheduler_feature_gates: ${FEATURE_GATES}
-  enabled_admissions: "/pods/mutate,/queues/mutate,/podgroups/mutate"
+  enabled_admissions: "/queues/mutate,/podgroups/mutate"
 EOF
   install-admission-policys
 }
