@@ -18,6 +18,7 @@ package admission
 
 import (
 	"context"
+	"time"
 
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
@@ -48,9 +49,16 @@ var _ = ginkgo.Describe("PodGroup Validating Webhook E2E Test", func() {
 		createdQueue, err := testCtx.Vcclient.SchedulingV1beta1().Queues().Create(context.TODO(), queue, metav1.CreateOptions{})
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
+		// Small delay to ensure mutation is complete
+		time.Sleep(100 * time.Millisecond)
+
+		// Get the latest version of the queue after potential mutations
+		updatedQueue, err := testCtx.Vcclient.SchedulingV1beta1().Queues().Get(context.TODO(), createdQueue.Name, metav1.GetOptions{})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+
 		// Update queue status to Open (since status is typically set by controller)
-		createdQueue.Status.State = schedulingv1beta1.QueueStateOpen
-		_, err = testCtx.Vcclient.SchedulingV1beta1().Queues().UpdateStatus(context.TODO(), createdQueue, metav1.UpdateOptions{})
+		updatedQueue.Status.State = schedulingv1beta1.QueueStateOpen
+		_, err = testCtx.Vcclient.SchedulingV1beta1().Queues().UpdateStatus(context.TODO(), updatedQueue, metav1.UpdateOptions{})
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Now create PodGroup that references this queue
