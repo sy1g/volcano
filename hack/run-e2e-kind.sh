@@ -43,6 +43,55 @@ function install-admission-policys {
   kubectl apply -f "pkg/webhooks/admission/queues/policies/validating-admission-policy.yaml"
   kubectl apply -f "pkg/webhooks/admission/queues/policies/mutating-admission-policy.yaml"
 }
+# kwok node config
+export KWOK_NODE_CPU=${KWOK_NODE_CPU:-8}      # 8 cores
+export KWOK_NODE_MEMORY=${KWOK_NODE_MEMORY:-8Gi}  # 8GB
+
+# create kwok node
+function create-kwok-node() {
+  local node_index=$1
+  
+  kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Node
+metadata:
+  annotations:
+    node.alpha.kubernetes.io/ttl: "0"
+    kwok.x-k8s.io/node: fake
+  labels:
+    beta.kubernetes.io/arch: amd64
+    beta.kubernetes.io/os: linux
+    kubernetes.io/arch: amd64
+    kubernetes.io/hostname: kwok-node-${node_index}
+    kubernetes.io/os: linux
+    kubernetes.io/role: agent
+    node-role.kubernetes.io/agent: ""
+    type: kwok
+  name: kwok-node-${node_index}
+spec:
+  taints:
+  - effect: NoSchedule
+    key: kwok.x-k8s.io/node
+    value: fake
+status:
+  capacity:
+    cpu: "${KWOK_NODE_CPU}"
+    memory: "${KWOK_NODE_MEMORY}"
+    pods: "110"
+  allocatable:
+    cpu: "${KWOK_NODE_CPU}"
+    memory: "${KWOK_NODE_MEMORY}"
+    pods: "110"
+EOF
+}
+
+# install kwok nodes
+function install-kwok-nodes() {
+  local node_count=$1
+  for i in $(seq 0 $((node_count-1))); do
+    create-kwok-node $i
+  done
+}
 
 function install-volcano {
   install-helm
@@ -100,6 +149,7 @@ custom:
     node-role.kubernetes.io/control-plane: ""
   scheduler_feature_gates: ${FEATURE_GATES}
   enabled_admissions: "/podgroups/mutate"
+  ignored_provisioners: ${IGNORED_PROVISIONERS:-""}
 EOF
   install-admission-policys
 }
@@ -146,6 +196,7 @@ source "${VK_ROOT}/hack/lib/install.sh"
 
 check-prerequisites
 kind-up-cluster
+install-kwok-with-helm
 
 if [[ -z ${KUBECONFIG+x} ]]; then
     export KUBECONFIG="${HOME}/.kube/config"
@@ -168,6 +219,7 @@ case ${E2E_TYPE} in
     KUBECONFIG=${KUBECONFIG} GOOS=${OS} ginkgo -r --slow-spec-threshold='30s' --progress ./test/e2e/vcctl/
     KUBECONFIG=${KUBECONFIG} GOOS=${OS} ginkgo -r --slow-spec-threshold='30s' --progress --focus="DRA E2E Test" ./test/e2e/dra/
     KUBECONFIG=${KUBECONFIG} GOOS=${OS} ginkgo -r --slow-spec-threshold='30s' --progress ./test/e2e/admission/
+    KUBECONFIG=${KUBECONFIG} GOOS=${OS} ginkgo -r --slow-spec-threshold='30s' --progress ./test/e2e/hypernode/
     ;;
 "JOBP")
     echo "Running parallel job e2e suite..."
@@ -200,6 +252,12 @@ case ${E2E_TYPE} in
 "ADMISSION")
     echo "Running admission webhook e2e suite..."
     KUBECONFIG=${KUBECONFIG} GOOS=${OS} ginkgo -v -r --slow-spec-threshold='30s' --progress ./test/e2e/admission/
+    ;;
+"HYPERNODE")
+    echo "Creating 8 kwok nodes for 3-tier topology"
+    install-kwok-nodes 8
+    echo "Running hypernode e2e suite..."
+    KUBECONFIG=${KUBECONFIG} GOOS=${OS} ginkgo -r --slow-spec-threshold='30s' --progress ./test/e2e/hypernode/
     ;;
 esac
 
