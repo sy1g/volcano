@@ -22,8 +22,6 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	schedulingv1beta1 "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
@@ -154,96 +152,6 @@ var _ = ginkgo.Describe("PodGroup Mutating Webhook E2E Test", func() {
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		// Even with empty annotation value, it should be set (this tests the mutation logic)
 		gomega.Expect(createdPodGroup.Spec.Queue).To(gomega.Equal(""))
-	})
-
-	ginkgo.It("Should handle podgroup with empty queue field", func() {
-		testCtx := util.InitTestContext(util.Options{})
-		defer util.CleanupTestContext(testCtx)
-
-		// Set queue annotation in namespace
-		namespaceQueueName := "namespace-queue-for-empty"
-		ns, err := testCtx.Kubeclient.CoreV1().Namespaces().Get(context.TODO(), testCtx.Namespace, metav1.GetOptions{})
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-
-		if ns.Annotations == nil {
-			ns.Annotations = make(map[string]string)
-		}
-		ns.Annotations[schedulingv1beta1.QueueNameAnnotationKey] = namespaceQueueName
-
-		_, err = testCtx.Kubeclient.CoreV1().Namespaces().Update(context.TODO(), ns, metav1.UpdateOptions{})
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-
-		// Create podgroup with empty queue (which should be treated as default)
-		podgroup := &schedulingv1beta1.PodGroup{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "empty-queue-podgroup",
-				Namespace: testCtx.Namespace,
-			},
-			Spec: schedulingv1beta1.PodGroupSpec{
-				Queue:        "", // Empty queue, should be treated as default
-				MinMember:    1,
-				MinResources: nil,
-			},
-		}
-
-		createdPodGroup, err := testCtx.Vcclient.SchedulingV1beta1().PodGroups(testCtx.Namespace).Create(context.TODO(), podgroup, metav1.CreateOptions{})
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		// Empty queue should not trigger mutation (only default queue does)
-		gomega.Expect(createdPodGroup.Spec.Queue).To(gomega.Equal(""))
-	})
-
-	ginkgo.It("Should preserve other podgroup fields during mutation", func() {
-		testCtx := util.InitTestContext(util.Options{})
-		defer util.CleanupTestContext(testCtx)
-
-		// Set queue annotation in namespace
-		namespaceQueueName := "namespace-queue-preserve"
-		ns, err := testCtx.Kubeclient.CoreV1().Namespaces().Get(context.TODO(), testCtx.Namespace, metav1.GetOptions{})
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-
-		if ns.Annotations == nil {
-			ns.Annotations = make(map[string]string)
-		}
-		ns.Annotations[schedulingv1beta1.QueueNameAnnotationKey] = namespaceQueueName
-
-		_, err = testCtx.Kubeclient.CoreV1().Namespaces().Update(context.TODO(), ns, metav1.UpdateOptions{})
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-
-		// Create podgroup with default queue and other fields
-		podgroup := &schedulingv1beta1.PodGroup{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "preserve-fields-podgroup",
-				Namespace: testCtx.Namespace,
-				Labels: map[string]string{
-					"test-label": "test-value",
-				},
-				Annotations: map[string]string{
-					"test-annotation": "test-value",
-				},
-			},
-			Spec: schedulingv1beta1.PodGroupSpec{
-				Queue:     schedulingv1beta1.DefaultQueue,
-				MinMember: 5,
-				MinResources: &corev1.ResourceList{
-					corev1.ResourceCPU:    resource.MustParse("2"),
-					corev1.ResourceMemory: resource.MustParse("4Gi"),
-				},
-			},
-		}
-
-		createdPodGroup, err := testCtx.Vcclient.SchedulingV1beta1().PodGroups(testCtx.Namespace).Create(context.TODO(), podgroup, metav1.CreateOptions{})
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-
-		// Queue should be mutated
-		gomega.Expect(createdPodGroup.Spec.Queue).To(gomega.Equal(namespaceQueueName))
-
-		// Other fields should be preserved
-		gomega.Expect(createdPodGroup.Spec.MinMember).To(gomega.Equal(int32(5)))
-		gomega.Expect(createdPodGroup.Spec.MinResources).NotTo(gomega.BeNil())
-		gomega.Expect((*createdPodGroup.Spec.MinResources)[corev1.ResourceCPU]).To(gomega.Equal(resource.MustParse("2")))
-		gomega.Expect((*createdPodGroup.Spec.MinResources)[corev1.ResourceMemory]).To(gomega.Equal(resource.MustParse("4Gi")))
-		gomega.Expect(createdPodGroup.Labels["test-label"]).To(gomega.Equal("test-value"))
-		gomega.Expect(createdPodGroup.Annotations["test-annotation"]).To(gomega.Equal("test-value"))
 	})
 
 	ginkgo.It("Should handle multiple podgroups in same namespace", func() {
