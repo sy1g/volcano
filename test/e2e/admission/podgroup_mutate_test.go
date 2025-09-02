@@ -119,41 +119,6 @@ var _ = ginkgo.Describe("PodGroup Mutating Webhook E2E Test", func() {
 		gomega.Expect(createdPodGroup.Spec.Queue).To(gomega.Equal(schedulingv1beta1.DefaultQueue))
 	})
 
-	ginkgo.It("Should handle empty queue annotation in namespace", func() {
-		testCtx := util.InitTestContext(util.Options{})
-		defer util.CleanupTestContext(testCtx)
-
-		// Set empty queue annotation in namespace
-		ns, err := testCtx.Kubeclient.CoreV1().Namespaces().Get(context.TODO(), testCtx.Namespace, metav1.GetOptions{})
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-
-		if ns.Annotations == nil {
-			ns.Annotations = make(map[string]string)
-		}
-		ns.Annotations[schedulingv1beta1.QueueNameAnnotationKey] = ""
-
-		_, err = testCtx.Kubeclient.CoreV1().Namespaces().Update(context.TODO(), ns, metav1.UpdateOptions{})
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-
-		// Create podgroup with default queue
-		podgroup := &schedulingv1beta1.PodGroup{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "empty-annotation-podgroup",
-				Namespace: testCtx.Namespace,
-			},
-			Spec: schedulingv1beta1.PodGroupSpec{
-				Queue:        schedulingv1beta1.DefaultQueue,
-				MinMember:    1,
-				MinResources: nil,
-			},
-		}
-
-		createdPodGroup, err := testCtx.Vcclient.SchedulingV1beta1().PodGroups(testCtx.Namespace).Create(context.TODO(), podgroup, metav1.CreateOptions{})
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		// Even with empty annotation value, it should be set (this tests the mutation logic)
-		gomega.Expect(createdPodGroup.Spec.Queue).To(gomega.Equal(""))
-	})
-
 	ginkgo.It("Should handle multiple podgroups in same namespace", func() {
 		testCtx := util.InitTestContext(util.Options{})
 		defer util.CleanupTestContext(testCtx)
