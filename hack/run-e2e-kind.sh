@@ -148,7 +148,7 @@ custom:
   default_ns:
     node-role.kubernetes.io/control-plane: ""
   scheduler_feature_gates: ${FEATURE_GATES}
-  enabled_admissions: "/podgroups/mutate"
+  enabled_admissions: ""
   ignored_provisioners: ${IGNORED_PROVISIONERS:-""}
 EOF
   install-admission-policys
@@ -252,6 +252,7 @@ case ${E2E_TYPE} in
 "ADMISSION")
     echo "Running admission webhook e2e suite..."
     KUBECONFIG=${KUBECONFIG} GOOS=${OS} ginkgo -v -r --slow-spec-threshold='30s' --progress ./test/e2e/admission/
+    sleep 5000000
     ;;
 "HYPERNODE")
     echo "Creating 8 kwok nodes for 3-tier topology"
