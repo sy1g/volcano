@@ -253,7 +253,6 @@ case ${E2E_TYPE} in
 "ADMISSION")
     echo "Running admission webhook e2e suite..."
     KUBECONFIG=${KUBECONFIG} GOOS=${OS} ginkgo -v -r --slow-spec-threshold='30s' --progress ./test/e2e/admission/
-    sleep 5000000
     ;;
 "HYPERNODE")
     echo "Creating 8 kwok nodes for 3-tier topology"
