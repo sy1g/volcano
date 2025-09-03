@@ -35,6 +35,28 @@ var _ = ginkgo.Describe("PodGroup Mutating Webhook E2E Test", func() {
 		defer util.CleanupTestContext(testCtx)
 
 		customQueue := "custom-queue"
+		// 先创建 custom-queue
+		queue := &schedulingv1beta1.Queue{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      customQueue,
+				Namespace: testCtx.Namespace,
+			},
+			Spec: schedulingv1beta1.QueueSpec{
+				Weight: 1,
+			},
+		}
+		_, err := testCtx.Vcclient.SchedulingV1beta1().Queues().Create(context.TODO(), queue, metav1.CreateOptions{})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+
+		// 轮询等待 queue 状态为 open
+		gomega.Eventually(func() string {
+			q, err := testCtx.Vcclient.SchedulingV1beta1().Queues().Get(context.TODO(), customQueue, metav1.GetOptions{})
+			if err != nil {
+				return ""
+			}
+			return string(q.Status.State)
+		}, 30, 1).Should(gomega.Equal("Open")) // 30秒超时，1秒间隔
+
 		podgroup := &schedulingv1beta1.PodGroup{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "custom-queue-podgroup",
@@ -68,6 +90,28 @@ var _ = ginkgo.Describe("PodGroup Mutating Webhook E2E Test", func() {
 
 		_, err = testCtx.Kubeclient.CoreV1().Namespaces().Update(context.TODO(), ns, metav1.UpdateOptions{})
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+
+		// 先创建 namespace-queue
+		queue := &schedulingv1beta1.Queue{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      namespaceQueueName,
+				Namespace: testCtx.Namespace,
+			},
+			Spec: schedulingv1beta1.QueueSpec{
+				Weight: 1,
+			},
+		}
+		_, err = testCtx.Vcclient.SchedulingV1beta1().Queues().Create(context.TODO(), queue, metav1.CreateOptions{})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+
+		// 轮询等待 queue 状态为 open
+		gomega.Eventually(func() string {
+			q, err := testCtx.Vcclient.SchedulingV1beta1().Queues().Get(context.TODO(), namespaceQueueName, metav1.GetOptions{})
+			if err != nil {
+				return ""
+			}
+			return string(q.Status.State)
+		}, 30, 1).Should(gomega.Equal("Open"))
 
 		// Create podgroup with default queue
 		podgroup := &schedulingv1beta1.PodGroup{
@@ -136,6 +180,47 @@ var _ = ginkgo.Describe("PodGroup Mutating Webhook E2E Test", func() {
 		_, err = testCtx.Kubeclient.CoreV1().Namespaces().Update(context.TODO(), ns, metav1.UpdateOptions{})
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
+		// 先创建 namespace-queue-multiple
+		queue1 := &schedulingv1beta1.Queue{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      namespaceQueueName,
+				Namespace: testCtx.Namespace,
+			},
+			Spec: schedulingv1beta1.QueueSpec{
+				Weight: 1,
+			},
+		}
+		_, err = testCtx.Vcclient.SchedulingV1beta1().Queues().Create(context.TODO(), queue1, metav1.CreateOptions{})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Eventually(func() string {
+			q, err := testCtx.Vcclient.SchedulingV1beta1().Queues().Get(context.TODO(), namespaceQueueName, metav1.GetOptions{})
+			if err != nil {
+				return ""
+			}
+			return string(q.Status.State)
+		}, 30, 1).Should(gomega.Equal("Open"))
+
+		// 再创建 custom-queue
+		customQueue := "custom-queue"
+		queue2 := &schedulingv1beta1.Queue{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      customQueue,
+				Namespace: testCtx.Namespace,
+			},
+			Spec: schedulingv1beta1.QueueSpec{
+				Weight: 1,
+			},
+		}
+		_, err = testCtx.Vcclient.SchedulingV1beta1().Queues().Create(context.TODO(), queue2, metav1.CreateOptions{})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Eventually(func() string {
+			q, err := testCtx.Vcclient.SchedulingV1beta1().Queues().Get(context.TODO(), customQueue, metav1.GetOptions{})
+			if err != nil {
+				return ""
+			}
+			return string(q.Status.State)
+		}, 30, 1).Should(gomega.Equal("Open"))
+
 		// Create multiple podgroups with different queue configurations
 		podgroup1 := &schedulingv1beta1.PodGroup{
 			ObjectMeta: metav1.ObjectMeta{
@@ -155,7 +240,7 @@ var _ = ginkgo.Describe("PodGroup Mutating Webhook E2E Test", func() {
 				Namespace: testCtx.Namespace,
 			},
 			Spec: schedulingv1beta1.PodGroupSpec{
-				Queue:        "custom-queue",
+				Queue:        customQueue,
 				MinMember:    1,
 				MinResources: nil,
 			},
