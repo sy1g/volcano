@@ -194,7 +194,7 @@ custom:
   default_ns:
     node-role.kubernetes.io/control-plane: ""
   scheduler_feature_gates: ${FEATURE_GATES}
-  enabled_admissions: "/pods/mutate,/queues/mutate,/podgroups/mutate,/jobs/mutate,/jobs/validate,/jobflows/validate,/pods/validate,/queues/validate,/podgroups/validate,/hypernodes/validate,"
+  enabled_admissions: "/pods/mutate,/queues/mutate,/podgroups/mutate,/jobs/mutate,/jobs/validate,/jobflows/validate,/pods/validate,/queues/validate,/podgroups/validate,/hypernodes/validate"
   ignored_provisioners: ${IGNORED_PROVISIONERS:-""}
 EOF
   ;;
@@ -340,7 +340,7 @@ case ${E2E_TYPE} in
     ;;
 "ADMISSION_POLICY")
     install-admission-policys
-    echo "Running admission webhook e2e suite..."
+    echo "Running admission policy e2e suite..."
     KUBECONFIG=${KUBECONFIG} GOOS=${OS} ginkgo -v -r --slow-spec-threshold='30s' --progress ./test/e2e/admission/
     ;;
 "ADMISSION_WEBHOOK")
