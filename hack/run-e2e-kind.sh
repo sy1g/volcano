@@ -112,7 +112,7 @@ function install-volcano {
   kubectl apply -f installer/namespace.yaml
 
 case ${E2E_TYPE} in
-"ADMISSION")
+"ADMISSION_POLICY")
   echo "Install volcano chart with crd version $crd_version and none webhook"
   cat <<EOF | helm install ${CLUSTER_NAME} installer/helm/chart/volcano \
   --namespace ${NAMESPACE} \
@@ -338,7 +338,7 @@ case ${E2E_TYPE} in
     echo "Running dra e2e suite..."
     KUBECONFIG=${KUBECONFIG} GOOS=${OS} ginkgo -v -r --slow-spec-threshold='30s' --progress --focus="DRA E2E Test" ./test/e2e/dra/
     ;;
-"ADMISSION")
+"ADMISSION_POLICY")
     install-admission-policys
     echo "Running admission webhook e2e suite..."
     KUBECONFIG=${KUBECONFIG} GOOS=${OS} ginkgo -v -r --slow-spec-threshold='30s' --progress ./test/e2e/admission/
