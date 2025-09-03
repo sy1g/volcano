@@ -11,6 +11,16 @@ spec:
       apiGroups: ["batch.volcano.sh"]
       apiVersions: ["v1alpha1"]
       resources: ["jobs"]
+  
+  # NOTE: This MutatingAdmissionPolicy provides a PARTIAL replacement for the webhook
+  # implementation. It handles Job-level mutations but CANNOT handle task-level mutations
+  # due to CEL expression limitations in dynamically processing arbitrary numbers of tasks.
+  # 
+  # IMPLEMENTED: Job-level defaults (queue, schedulerName, maxRetry, minAvailable, plugins)
+  # NOT IMPLEMENTED: Task-level defaults (names, minAvailable, maxRetry, DNSPolicy)
+  #
+  # For complete functionality, the existing webhook must remain active alongside this policy.
+  
   mutations:
   # Set default queue
   - patchType: JSONPatch
@@ -59,147 +69,18 @@ spec:
           ).sum()
         }] : []
 
-  # Set default task names - use individual patches for each task
-  - patchType: JSONPatch
-    jsonPatch:
-      expression: |
-        has(object.spec.tasks) && size(object.spec.tasks) > 0 && 
-        (!has(object.spec.tasks[0].name) || object.spec.tasks[0].name == "") ?
-        [JSONPatch{
-          op: "add",
-          path: "/spec/tasks/0/name", 
-          value: "default0"
-        }] : []
-
-  - patchType: JSONPatch
-    jsonPatch:
-      expression: |
-        has(object.spec.tasks) && size(object.spec.tasks) > 1 && 
-        (!has(object.spec.tasks[1].name) || object.spec.tasks[1].name == "") ?
-        [JSONPatch{
-          op: "add",
-          path: "/spec/tasks/1/name", 
-          value: "default1"
-        }] : []
-
-  - patchType: JSONPatch
-    jsonPatch:
-      expression: |
-        has(object.spec.tasks) && size(object.spec.tasks) > 2 && 
-        (!has(object.spec.tasks[2].name) || object.spec.tasks[2].name == "") ?
-        [JSONPatch{
-          op: "add",
-          path: "/spec/tasks/2/name", 
-          value: "default2"
-        }] : []
-
-  # Set default task minAvailable
-  - patchType: JSONPatch
-    jsonPatch:
-      expression: |
-        has(object.spec.tasks) && size(object.spec.tasks) > 0 && 
-        !has(object.spec.tasks[0].minAvailable) ?
-        [JSONPatch{
-          op: "add",
-          path: "/spec/tasks/0/minAvailable",
-          value: object.spec.tasks[0].replicas
-        }] : []
-
-  - patchType: JSONPatch
-    jsonPatch:
-      expression: |
-        has(object.spec.tasks) && size(object.spec.tasks) > 1 && 
-        !has(object.spec.tasks[1].minAvailable) ?
-        [JSONPatch{
-          op: "add",
-          path: "/spec/tasks/1/minAvailable",
-          value: object.spec.tasks[1].replicas
-        }] : []
-
-  - patchType: JSONPatch
-    jsonPatch:
-      expression: |
-        has(object.spec.tasks) && size(object.spec.tasks) > 2 && 
-        !has(object.spec.tasks[2].minAvailable) ?
-        [JSONPatch{
-          op: "add",
-          path: "/spec/tasks/2/minAvailable",
-          value: object.spec.tasks[2].replicas
-        }] : []
-
-  # Set default task maxRetry
-  - patchType: JSONPatch
-    jsonPatch:
-      expression: |
-        has(object.spec.tasks) && size(object.spec.tasks) > 0 && 
-        (!has(object.spec.tasks[0].maxRetry) || object.spec.tasks[0].maxRetry == 0) ?
-        [JSONPatch{
-          op: "add",
-          path: "/spec/tasks/0/maxRetry",
-          value: 3
-        }] : []
-
-  - patchType: JSONPatch
-    jsonPatch:
-      expression: |
-        has(object.spec.tasks) && size(object.spec.tasks) > 1 && 
-        (!has(object.spec.tasks[1].maxRetry) || object.spec.tasks[1].maxRetry == 0) ?
-        [JSONPatch{
-          op: "add",
-          path: "/spec/tasks/1/maxRetry",
-          value: 3
-        }] : []
-
-  - patchType: JSONPatch
-    jsonPatch:
-      expression: |
-        has(object.spec.tasks) && size(object.spec.tasks) > 2 && 
-        (!has(object.spec.tasks[2].maxRetry) || object.spec.tasks[2].maxRetry == 0) ?
-        [JSONPatch{
-          op: "add",
-          path: "/spec/tasks/2/maxRetry",
-          value: 3
-        }] : []
-
-  # Set DNSPolicy for hostNetwork tasks
-  - patchType: JSONPatch
-    jsonPatch:
-      expression: |
-        has(object.spec.tasks) && size(object.spec.tasks) > 0 && 
-        has(object.spec.tasks[0].template.spec.hostNetwork) && 
-        object.spec.tasks[0].template.spec.hostNetwork &&
-        (!has(object.spec.tasks[0].template.spec.dnsPolicy) || object.spec.tasks[0].template.spec.dnsPolicy == "") ?
-        [JSONPatch{
-          op: "add",
-          path: "/spec/tasks/0/template/spec/dnsPolicy",
-          value: "ClusterFirstWithHostNet"
-        }] : []
-
-  - patchType: JSONPatch
-    jsonPatch:
-      expression: |
-        has(object.spec.tasks) && size(object.spec.tasks) > 1 && 
-        has(object.spec.tasks[1].template.spec.hostNetwork) && 
-        object.spec.tasks[1].template.spec.hostNetwork &&
-        (!has(object.spec.tasks[1].template.spec.dnsPolicy) || object.spec.tasks[1].template.spec.dnsPolicy == "") ?
-        [JSONPatch{
-          op: "add",
-          path: "/spec/tasks/1/template/spec/dnsPolicy",
-          value: "ClusterFirstWithHostNet"
-        }] : []
-
-  - patchType: JSONPatch
-    jsonPatch:
-      expression: |
-        has(object.spec.tasks) && size(object.spec.tasks) > 2 && 
-        has(object.spec.tasks[2].template.spec.hostNetwork) && 
-        object.spec.tasks[2].template.spec.hostNetwork &&
-        (!has(object.spec.tasks[2].template.spec.dnsPolicy) || object.spec.tasks[2].template.spec.dnsPolicy == "") ?
-        [JSONPatch{
-          op: "add",
-          path: "/spec/tasks/2/template/spec/dnsPolicy",
-          value: "ClusterFirstWithHostNet"
-        }] : []
+  # NOTE: The following task-level mutations are NOT implemented in MutatingAdmissionPolicy
+  # because CEL expressions cannot dynamically iterate over arbitrary number of tasks.
+  # MutatingAdmissionPolicy would require hardcoded rules for each task index (0, 1, 2, etc.)
+  # which is not scalable and differs from the webhook implementation that handles all tasks.
+  # 
+  # Missing task-level mutations that require webhook implementation:
+  # - Set default task names (task0, task1, task2, ...)
+  # - Set default task minAvailable values 
+  # - Set default task maxRetry values
+  # - Set DNSPolicy for tasks using hostNetwork
+  #
+  # These mutations must be handled by the existing webhook for proper functionality.
 
   # Add svc plugin for distributed frameworks
   - patchType: JSONPatch
