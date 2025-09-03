@@ -1,4 +1,4 @@
-name: E2E Admission
+name: E2E Admission Webhook
 
 on:
   push:
@@ -8,9 +8,9 @@ on:
   pull_request:
 
 jobs:
-  e2e_admission:
+  e2e_admission_webhook:
     runs-on: ubuntu-24.04
-    name: E2E about Admission
+    name: E2E about Admission Webhook
     timeout-minutes: 50
     steps:
       - name: Install Go
@@ -39,7 +39,7 @@ jobs:
       - name: Run E2E Tests
         run: |
           export ARTIFACTS_PATH=${{ github.workspace }}/e2e-admission-logs
-          make e2e-test-admission-policy CC=/usr/local/musl/bin/musl-gcc
+          make e2e-test-admission-webhook CC=/usr/local/musl/bin/musl-gcc
 
       - name: Upload e2e admission logs
         if: failure()
