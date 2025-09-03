@@ -60,14 +60,18 @@ spec:
       message: "member exactMatch name is required"
       reason: Invalid
 
-    # Validate exactMatch names follow DNS naming conventions (qualified name validation)
+    # Validate exactMatch names follow Kubernetes qualified name rules using CEL format library
     - expression: |
         !has(object.spec) || !has(object.spec.members) || size(object.spec.members) == 0 ||
-        variables.exactMatchNames.all(name, 
-          name.matches('^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$') && 
-          size(name) <= 253
+        variables.exactMatchNames.all(name,
+          !format.qualifiedName().validate(name).hasValue()
         )
-      message: "member exactMatch validate failed [name part must consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character]"
+      message: "member exactMatch validate failed"
+      messageExpression: |
+        variables.exactMatchNames
+          .map(name, format.qualifiedName().validate(name).orValue([]).join("\\n"))
+          .filter(msg, msg != "")
+          .join("\\n")
       reason: Invalid
 
     # Validate regexMatch patterns are not empty
