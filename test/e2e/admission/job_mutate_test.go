@@ -26,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"volcano.sh/apis/pkg/apis/batch/v1alpha1"
+	schedulingv1beta1 "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
 	"volcano.sh/volcano/test/e2e/util"
 )
 
@@ -403,6 +404,28 @@ var _ = ginkgo.Describe("Job Mutating Webhook E2E Test", func() {
 		defer util.CleanupTestContext(testCtx)
 
 		customMinAvailable := int32(2)
+		customQueue := "custom-queue"
+		// 先创建 custom-queue
+		queue := &schedulingv1beta1.Queue{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      customQueue,
+				Namespace: testCtx.Namespace,
+			},
+			Spec: schedulingv1beta1.QueueSpec{
+				Weight: 1,
+			},
+		}
+		_, err := testCtx.Vcclient.SchedulingV1beta1().Queues().Create(context.TODO(), queue, metav1.CreateOptions{})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		// 轮询等待 queue 状态为 open
+		gomega.Eventually(func() string {
+			q, err := testCtx.Vcclient.SchedulingV1beta1().Queues().Get(context.TODO(), customQueue, metav1.GetOptions{})
+			if err != nil {
+				return ""
+			}
+			return string(q.Status.State)
+		}, 30, 1).Should(gomega.Equal("Open"))
+
 		job := &v1alpha1.Job{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "preserve-values-job",
@@ -410,7 +433,7 @@ var _ = ginkgo.Describe("Job Mutating Webhook E2E Test", func() {
 			},
 			Spec: v1alpha1.JobSpec{
 				MinAvailable:  2,              // Explicitly specified
-				Queue:         "custom-queue", // Explicitly specified
+				Queue:         customQueue,    // Explicitly specified
 				SchedulerName: "custom-sched", // Explicitly specified
 				MaxRetry:      10,             // Explicitly specified
 				Tasks: []v1alpha1.TaskSpec{
@@ -430,7 +453,7 @@ var _ = ginkgo.Describe("Job Mutating Webhook E2E Test", func() {
 
 		// Should preserve all explicitly specified values
 		gomega.Expect(createdJob.Spec.MinAvailable).To(gomega.Equal(int32(2)))
-		gomega.Expect(createdJob.Spec.Queue).To(gomega.Equal("custom-queue"))
+		gomega.Expect(createdJob.Spec.Queue).To(gomega.Equal(customQueue))
 		gomega.Expect(createdJob.Spec.SchedulerName).To(gomega.Equal("custom-sched"))
 		gomega.Expect(createdJob.Spec.MaxRetry).To(gomega.Equal(int32(10)))
 		gomega.Expect(createdJob.Spec.Tasks[0].Name).To(gomega.Equal("custom-task"))
