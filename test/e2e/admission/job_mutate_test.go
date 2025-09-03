@@ -245,7 +245,8 @@ var _ = ginkgo.Describe("Job Mutating Webhook E2E Test", func() {
 				MinAvailable: 1,
 				Queue:        "default",
 				Plugins: map[string][]string{
-					"mpi": {},
+					// Provide master/worker names so admission validator can find the tasks
+					"mpi": {"--master=task-1", "--worker=task-1"},
 					// svc plugin not specified, should be added automatically
 				},
 				Tasks: []v1alpha1.TaskSpec{
@@ -309,7 +310,8 @@ var _ = ginkgo.Describe("Job Mutating Webhook E2E Test", func() {
 				MinAvailable: 1,
 				Queue:        "default",
 				Plugins: map[string][]string{
-					"mpi": {},
+					// Provide master/worker names so admission validator can find the tasks
+					"mpi": {"--master=task-1", "--worker=task-1"},
 					// ssh plugin not specified, should be added automatically
 				},
 				Tasks: []v1alpha1.TaskSpec{
