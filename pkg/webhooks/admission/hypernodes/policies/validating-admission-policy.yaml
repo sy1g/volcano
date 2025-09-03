@@ -66,12 +66,7 @@ spec:
         variables.exactMatchNames.all(name,
           !format.qualifiedName().validate(name).hasValue()
         )
-      message: "member exactMatch validate failed"
-      messageExpression: |
-        variables.exactMatchNames
-          .map(name, format.qualifiedName().validate(name).orValue([]).join("\\n"))
-          .filter(msg, msg != "")
-          .join("\\n")
+      message: "member exactMatch validate failed [name part must consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character]"
       reason: Invalid
 
     # Validate regexMatch patterns are not empty
