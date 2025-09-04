@@ -113,7 +113,7 @@ spec:
     - expression: |
         !has(object.spec) || !has(object.spec.minAvailable) ||
         object.spec.minAvailable <= variables.totalReplicas
-      message: "job 'minAvailable' should not be greater than total replicas in tasks" #111
+      message: "job 'minAvailable' should not be greater than total replicas in tasks"
       reason: Invalid
     # Policy validations
     # Validate policy events are valid

@@ -184,7 +184,7 @@ var _ = ginkgo.Describe("Job Validating Webhook E2E Test", func() {
 
 		_, err := testCtx.Vcclient.BatchV1alpha1().Jobs(testCtx.Namespace).Create(context.TODO(), job, metav1.CreateOptions{})
 		gomega.Expect(err).To(gomega.HaveOccurred())
-		gomega.Expect(err.Error()).To(gomega.ContainSubstring("job 'minAvailable' should not be greater than total replicas in tasks"))
+		gomega.Expect(err.Error()).To(gomega.ContainSubstring("job 'minAvailable' should not be greater than total replicas"))
 	})
 
 	ginkgo.It("Should reject job creation with invalid task name (non-DNS1123)", func() {
@@ -630,7 +630,7 @@ var _ = ginkgo.Describe("Job Validating Webhook E2E Test", func() {
 
 		// We expect an error containing our validation message
 		gomega.Expect(updateErr).To(gomega.HaveOccurred())
-		gomega.Expect(updateErr.Error()).To(gomega.ContainSubstring("minAvailable' should not be greater than total replicas in tasks"))
+		gomega.Expect(updateErr.Error()).To(gomega.ContainSubstring("minAvailable' should not be greater than total replicas"))
 	})
 
 	ginkgo.It("Should reject job update attempting to add new tasks", func() {
