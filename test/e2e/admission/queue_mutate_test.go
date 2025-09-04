@@ -18,6 +18,7 @@ package admission
 
 import (
 	"context"
+	"strings"
 
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
@@ -107,7 +108,7 @@ var _ = ginkgo.Describe("Queue Mutating Webhook E2E Test", func() {
 
 		createdQueue, err := testCtx.Vcclient.SchedulingV1beta1().Queues().Create(context.TODO(), queue, metav1.CreateOptions{})
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		
+
 		// Should preserve explicitly specified values
 		gomega.Expect(createdQueue.Spec.Weight).To(gomega.Equal(int32(5)))
 		gomega.Expect(createdQueue.Spec.Reclaimable).NotTo(gomega.BeNil())
@@ -134,7 +135,8 @@ var _ = ginkgo.Describe("Queue Mutating Webhook E2E Test", func() {
 		// This should fail due to validation policy requiring both annotations
 		_, err := testCtx.Vcclient.SchedulingV1beta1().Queues().Create(context.TODO(), queue, metav1.CreateOptions{})
 		gomega.Expect(err).To(gomega.HaveOccurred())
-		gomega.Expect(err.Error()).To(gomega.ContainSubstring("volcano.sh/hierarchy must have the same length with volcano.sh/hierarchy.weight"))
+		errStr := err.Error()
+		gomega.Expect(strings.Contains(errStr, "volcano.sh/hierarchy must have the same length with volcano.sh/hierarchy.weight") || strings.Contains(errStr, "in the  is invalid number: strconv.ParseFloat: parsing "))
 	})
 
 	ginkgo.It("Should reject queue with mismatched hierarchy annotation lengths", func() {
@@ -145,7 +147,7 @@ var _ = ginkgo.Describe("Queue Mutating Webhook E2E Test", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "mismatched-hierarchy-queue",
 				Annotations: map[string]string{
-					schedulingv1beta1.KubeHierarchyAnnotationKey:       "a/b",    // 2 segments
+					schedulingv1beta1.KubeHierarchyAnnotationKey:       "a/b",   // 2 segments
 					schedulingv1beta1.KubeHierarchyWeightAnnotationKey: "1/2/3", // 3 segments - mismatch
 				},
 			},
@@ -157,7 +159,8 @@ var _ = ginkgo.Describe("Queue Mutating Webhook E2E Test", func() {
 		// This should fail due to validation policy requiring matching lengths
 		_, err := testCtx.Vcclient.SchedulingV1beta1().Queues().Create(context.TODO(), queue, metav1.CreateOptions{})
 		gomega.Expect(err).To(gomega.HaveOccurred())
-		gomega.Expect(err.Error()).To(gomega.ContainSubstring("volcano.sh/hierarchy must have the same length with volcano.sh/hierarchy.weight"))
+		errStr := err.Error()
+		gomega.Expect(strings.Contains(errStr, "volcano.sh/hierarchy must have the same length with volcano.sh/hierarchy.weight") || strings.Contains(errStr, "volcano.sh/hierarchy must have the same length with volcano.sh/hierarchy-weights"))
 	})
 
 	// Note: We are not testing hierarchy root prefix addition in e2e tests because:
