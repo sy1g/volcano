@@ -221,7 +221,7 @@ func TestValidateJobCreate(t *testing.T) {
 				},
 			},
 			reviewResponse: admissionv1.AdmissionResponse{Allowed: true},
-			ret:            "job 'minAvailable' should not be greater than total replicas in tasks",
+			ret:            "job 'minAvailable' should not be greater than total replicas",
 			ExpectErr:      true,
 		},
 		// Job Plugin illegal
