@@ -402,8 +402,8 @@ var _ = ginkgo.Describe("Job Mutating Webhook E2E Test", func() {
 		defer util.CleanupTestContext(testCtx)
 
 		customMinAvailable := int32(2)
-		customQueue := "custom-queue"
-		// 先创建 custom-queue
+		customQueue := "custom-queue-job"
+		// 先创建 custom-queue-job
 		queue := &schedulingv1beta1.Queue{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      customQueue,

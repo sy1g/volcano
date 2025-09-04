@@ -34,8 +34,8 @@ var _ = ginkgo.Describe("PodGroup Mutating Webhook E2E Test", func() {
 		testCtx := util.InitTestContext(util.Options{})
 		defer util.CleanupTestContext(testCtx)
 
-		customQueue := "custom-queue"
-		// 先创建 custom-queue
+		customQueue := "custom-queue-podgroup"
+		// 先创建 custom-queue-podgroup
 		queue := &schedulingv1beta1.Queue{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      customQueue,
@@ -200,8 +200,8 @@ var _ = ginkgo.Describe("PodGroup Mutating Webhook E2E Test", func() {
 			return string(q.Status.State)
 		}, 30, 1).Should(gomega.Equal("Open"))
 
-		// 再创建 custom-queue
-		customQueue := "custom-queue"
+		// 再创建 custom-queue-podgroup-2
+		customQueue := "custom-queue-podgroup-2"
 		queue2 := &schedulingv1beta1.Queue{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      customQueue,
