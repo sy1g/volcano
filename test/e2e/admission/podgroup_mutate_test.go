@@ -256,6 +256,6 @@ var _ = ginkgo.Describe("PodGroup Mutating Webhook E2E Test", func() {
 		gomega.Expect(createdPodGroup1.Spec.Queue).To(gomega.Equal(namespaceQueueName))
 
 		// Second podgroup should keep its custom queue
-		gomega.Expect(createdPodGroup2.Spec.Queue).To(gomega.Equal("custom-queue"))
+		gomega.Expect(createdPodGroup2.Spec.Queue).To(gomega.Equal(customQueue))
 	})
 })

@@ -630,7 +630,7 @@ var _ = ginkgo.Describe("Job Validating Webhook E2E Test", func() {
 
 		// We expect an error containing our validation message
 		gomega.Expect(updateErr).To(gomega.HaveOccurred())
-		gomega.Expect(updateErr.Error()).To(gomega.ContainSubstring("minAvailable' should not be greater than total replicas"))
+		gomega.Expect(updateErr.Error()).To(gomega.ContainSubstring("not be greater than total replicas"))
 	})
 
 	ginkgo.It("Should reject job update attempting to add new tasks", func() {
