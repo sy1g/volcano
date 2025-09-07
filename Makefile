@@ -221,6 +221,13 @@ update-development-yaml:
 	mv installer/volcano-agent-${TAG}.yaml installer/volcano-agent-development.yaml
 	mv installer/volcano-monitoring-${TAG}.yaml installer/volcano-monitoring.yaml
 
+	ENABLE_VAP=true make generate-yaml RELEASE_DIR=installer
+	mv installer/volcano-${TAG}.yaml installer/volcano-development-vap.yaml
+
+	ENABLE_VAP=true ENABLE_MAP=true make generate-yaml RELEASE_DIR=installer
+	mv installer/volcano-${TAG}.yaml installer/volcano-development-vap-map.yaml
+
+
 mod-download-go:
 	@-GOFLAGS="-mod=readonly" find -name go.mod -execdir go mod download \;
 # go mod tidy is needed with Golang 1.16+ as go mod download affects go.sum
