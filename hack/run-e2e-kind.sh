@@ -31,19 +31,6 @@ export CLUSTER_CONTEXT=("--name" "${CLUSTER_NAME}")
 
 export KIND_OPT=${KIND_OPT:="--config ${VK_ROOT}/hack/e2e-kind-config.yaml"}
 
-function install-admission-policys {
-  echo "Installing AdmissionPolicy "
-  kubectl apply -f "pkg/webhooks/admission/hypernodes/policies/validating-admission-policy.yaml"
-  kubectl apply -f "pkg/webhooks/admission/jobs/policies/validating-admission-policy.yaml"
-  kubectl apply -f "pkg/webhooks/admission/jobs/policies/mutating-admission-policy.yaml"
-  kubectl apply -f "pkg/webhooks/admission/jobflows/policies/validating-admission-policy.yaml"
-  kubectl apply -f "pkg/webhooks/admission/pods/policies/validating-admission-policy.yaml"
-  kubectl apply -f "pkg/webhooks/admission/pods/policies/mutating-admission-policy.yaml"
-  kubectl apply -f "pkg/webhooks/admission/podgroups/policies/validating-admission-policy.yaml"
-  kubectl apply -f "pkg/webhooks/admission/podgroups/policies/mutating-admission-policy.yaml"
-  kubectl apply -f "pkg/webhooks/admission/queues/policies/validating-admission-policy.yaml"
-  kubectl apply -f "pkg/webhooks/admission/queues/policies/mutating-admission-policy.yaml"
-}
 # kwok node config
 export KWOK_NODE_CPU=${KWOK_NODE_CPU:-8}      # 8 cores
 export KWOK_NODE_MEMORY=${KWOK_NODE_MEMORY:-8Gi}  # 8GB
@@ -113,7 +100,7 @@ function install-volcano {
 
 case ${E2E_TYPE} in
 "ADMISSION_POLICY")
-  echo "Install volcano chart with crd version $crd_version and none webhook"
+  echo "Install volcano chart with crd version $crd_version and VAP/MAP enabled"
   cat <<EOF | helm install ${CLUSTER_NAME} installer/helm/chart/volcano \
   --namespace ${NAMESPACE} \
   --kubeconfig ${KUBECONFIG} \
@@ -152,6 +139,8 @@ custom:
     node-role.kubernetes.io/control-plane: ""
   scheduler_feature_gates: ${FEATURE_GATES}
   enabled_admissions: ""
+  vap_enable: true
+  map_enable: true
   ignored_provisioners: ${IGNORED_PROVISIONERS:-""}
 EOF
   ;;
@@ -195,6 +184,8 @@ custom:
     node-role.kubernetes.io/control-plane: ""
   scheduler_feature_gates: ${FEATURE_GATES}
   enabled_admissions: "/pods/mutate,/queues/mutate,/podgroups/mutate,/jobs/mutate,/jobs/validate,/jobflows/validate,/pods/validate,/queues/validate,/podgroups/validate,/hypernodes/validate"
+  vap_enable: false
+  map_enable: false
   ignored_provisioners: ${IGNORED_PROVISIONERS:-""}
 EOF
   ;;
@@ -340,7 +331,6 @@ case ${E2E_TYPE} in
     KUBECONFIG=${KUBECONFIG} GOOS=${OS} ginkgo -v -r --slow-spec-threshold='30s' --progress --focus="DRA E2E Test" ./test/e2e/dra/
     ;;
 "ADMISSION_POLICY")
-    install-admission-policys
     echo "Running admission policy e2e suite..."
     KUBECONFIG=${KUBECONFIG} GOOS=${OS} ginkgo -v -r --slow-spec-threshold='30s' --progress ./test/e2e/admission/
     ;;
