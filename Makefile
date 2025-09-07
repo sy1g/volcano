@@ -223,10 +223,13 @@ update-development-yaml:
 
 	ENABLE_VAP=true make generate-yaml RELEASE_DIR=installer
 	mv installer/volcano-${TAG}.yaml installer/volcano-development-vap.yaml
+	rm installer/volcano-agent-${TAG}.yaml
+	rm installer/volcano-monitoring-${TAG}.yaml
 
 	ENABLE_VAP=true ENABLE_MAP=true make generate-yaml RELEASE_DIR=installer
 	mv installer/volcano-${TAG}.yaml installer/volcano-development-vap-map.yaml
-
+	rm installer/volcano-agent-${TAG}.yaml
+	rm installer/volcano-monitoring-${TAG}.yaml
 
 mod-download-go:
 	@-GOFLAGS="-mod=readonly" find -name go.mod -execdir go mod download \;
