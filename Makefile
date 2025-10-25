@@ -95,9 +95,18 @@ vcctl: init
 image_bins: vc-scheduler vc-controller-manager vc-webhook-manager vc-agent
 
 images:
-	for name in controller-manager scheduler webhook-manager agent; do\
-		docker buildx build -t "${IMAGE_PREFIX}/vc-$$name:$(TAG)" . -f ./installer/dockerfile/$$name/Dockerfile --output=type=${BUILDX_OUTPUT_TYPE} --platform ${DOCKER_PLATFORMS} --build-arg APK_MIRROR=${APK_MIRROR} --build-arg OPEN_EULER_IMAGE_TAG=${OPEN_EULER_IMAGE_TAG}; \
-	done
+	@set -e; \
+	for name in controller-manager scheduler webhook-manager agent; do \
+		( \
+			docker buildx build -t "${IMAGE_PREFIX}/vc-$$name:$(TAG)" . \
+			-f ./installer/dockerfile/$$name/Dockerfile \
+			--output=type=${BUILDX_OUTPUT_TYPE} \
+			--platform ${DOCKER_PLATFORMS} \
+			--build-arg APK_MIRROR=${APK_MIRROR} \
+			--build-arg OPEN_EULER_IMAGE_TAG=${OPEN_EULER_IMAGE_TAG} \
+		) & \
+	done; \
+	wait
 
 vc-agent-image:
 	docker buildx build -t "${IMAGE_PREFIX}/vc-agent:$(TAG)" . -f ./installer/dockerfile/agent/Dockerfile --output=type=${BUILDX_OUTPUT_TYPE} --platform ${DOCKER_PLATFORMS} --build-arg APK_MIRROR=${APK_MIRROR} --build-arg OPEN_EULER_IMAGE_TAG=${OPEN_EULER_IMAGE_TAG}
@@ -155,6 +164,12 @@ e2e-test-dra: images
 
 e2e-test-hypernode: images
 	E2E_TYPE=HYPERNODE ./hack/run-e2e-kind.sh
+
+e2e-test-admission-webhook: images
+	E2E_TYPE=ADMISSION_WEBHOOK ./hack/run-e2e-kind.sh
+
+e2e-test-admission-policy: images
+	E2E_TYPE=ADMISSION_POLICY ./hack/run-e2e-kind.sh
 
 generate-yaml: init manifests
 	./hack/generate-yaml.sh CRD_VERSION=${CRD_VERSION}
