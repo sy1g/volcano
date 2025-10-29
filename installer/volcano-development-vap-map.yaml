@@ -10834,7 +10834,7 @@ spec:
   validationActions: [Deny]
 ---
 # Source: volcano/templates/mutating_admission_policy.yaml
-apiVersion: admissionregistration.k8s.io/v1alpha1
+apiVersion: admissionregistration.k8s.io/v1beta1
 kind: MutatingAdmissionPolicy
 metadata:
   name: volcano-job-mutation-policy
@@ -10946,7 +10946,7 @@ spec:
         }] : []
 ---
 # Source: volcano/templates/mutating_admission_policy.yaml
-apiVersion: admissionregistration.k8s.io/v1alpha1
+apiVersion: admissionregistration.k8s.io/v1beta1
 kind: MutatingAdmissionPolicy
 metadata:
   name: volcano-queue-mutation-policy
@@ -11006,7 +11006,7 @@ spec:
         }] : []
 ---
 # Source: volcano/templates/mutating_admission_policy.yaml
-apiVersion: admissionregistration.k8s.io/v1alpha1
+apiVersion: admissionregistration.k8s.io/v1beta1
 kind: MutatingAdmissionPolicy
 metadata:
   name: volcano-podgroup-mutation-policy
@@ -11035,7 +11035,7 @@ spec:
         }] : []
 ---
 # Source: volcano/templates/mutating_admission_policy.yaml
-apiVersion: admissionregistration.k8s.io/v1alpha1
+apiVersion: admissionregistration.k8s.io/v1beta1
 kind: MutatingAdmissionPolicy
 metadata:
   name: volcano-pod-mutation-policy
@@ -11153,7 +11153,7 @@ spec:
         }] : []
 ---
 # Source: volcano/templates/mutating_admission_policy.yaml
-apiVersion: admissionregistration.k8s.io/v1alpha1
+apiVersion: admissionregistration.k8s.io/v1beta1
 kind: MutatingAdmissionPolicyBinding
 metadata:
   name: volcano-job-mutation-binding
@@ -11167,7 +11167,7 @@ spec:
       resources: ["jobs"]
 ---
 # Source: volcano/templates/mutating_admission_policy.yaml
-apiVersion: admissionregistration.k8s.io/v1alpha1
+apiVersion: admissionregistration.k8s.io/v1beta1
 kind: MutatingAdmissionPolicyBinding
 metadata:
   name: volcano-queue-mutation-binding
@@ -11181,7 +11181,7 @@ spec:
       resources: ["queues"]
 ---
 # Source: volcano/templates/mutating_admission_policy.yaml
-apiVersion: admissionregistration.k8s.io/v1alpha1
+apiVersion: admissionregistration.k8s.io/v1beta1
 kind: MutatingAdmissionPolicyBinding
 metadata:
   name: volcano-podgroup-mutation-binding
@@ -11195,7 +11195,7 @@ spec:
       resources: ["podgroups"]
 ---
 # Source: volcano/templates/mutating_admission_policy.yaml
-apiVersion: admissionregistration.k8s.io/v1alpha1
+apiVersion: admissionregistration.k8s.io/v1beta1
 kind: MutatingAdmissionPolicyBinding
 metadata:
   name: volcano-pod-mutation-binding
