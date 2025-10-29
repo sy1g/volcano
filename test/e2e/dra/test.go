@@ -228,7 +228,7 @@ var _ = ginkgo.Describe("DRA E2E Test", func() {
 			gomega.Expect(updatedResourceClaim2).ToNot(gomega.BeNil())
 			gomega.Expect(updatedResourceClaim2.Status.Devices).To(gomega.Equal(updatedResourceClaim.Status.Devices))
 
-			getResourceClaim, err := b.f.ClientSet.ResourceV1beta1().ResourceClaims(b.f.Namespace.Name).Get(ctx, claim.Name, metav1.GetOptions{})
+			getResourceClaim, err := b.f.ClientSet.ResourceV1().ResourceClaims(b.f.Namespace.Name).Get(ctx, claim.Name, metav1.GetOptions{})
 			framework.ExpectNoError(err)
 			gomega.Expect(getResourceClaim).ToNot(gomega.BeNil())
 			gomega.Expect(getResourceClaim.Status.Devices).To(gomega.Equal(updatedResourceClaim.Status.Devices))
@@ -312,7 +312,7 @@ var _ = ginkgo.Describe("DRA E2E Test", func() {
 			var objects []klog.KMetadata
 			pod, template := b.podInline()
 			deviceClassName := template.Spec.Spec.Devices.Requests[0].DeviceClassName
-			class, err := f.ClientSet.ResourceV1beta1().DeviceClasses().Get(ctx, deviceClassName, metav1.GetOptions{})
+			class, err := f.ClientSet.ResourceV1().DeviceClasses().Get(ctx, deviceClassName, metav1.GetOptions{})
 			framework.ExpectNoError(err)
 			deviceClassName += "-b"
 			template.Spec.Spec.Devices.Requests[0].DeviceClassName = deviceClassName
