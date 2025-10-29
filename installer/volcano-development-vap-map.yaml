@@ -10130,6 +10130,1084 @@ webhooks:
     sideEffects: NoneOnDryRun  
     timeoutSeconds: 10
 ---
+# Source: volcano/templates/validating_admission_policy.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: job-validation-policy
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - operations: ["CREATE", "UPDATE"]
+        apiGroups: ["batch.volcano.sh"]
+        apiVersions: ["v1alpha1"]
+        resources: ["jobs"]
+  variables:
+    # Extract task names for validation
+    - name: taskNames
+      expression: |
+        has(object.spec) && has(object.spec.tasks) ? 
+        object.spec.tasks.map(task, task.name) : []
+    # Calculate total replicas
+    - name: totalReplicas
+      expression: |
+        has(object.spec) && has(object.spec.tasks) ? 
+        object.spec.tasks.map(task, task.replicas).sum() : 0
+    # Check if tasks have dependencies
+    - name: hasDependencies
+      expression: |
+        has(object.spec) && has(object.spec.tasks) ? 
+        object.spec.tasks.exists(task, has(task.dependsOn) && has(task.dependsOn.name) && size(task.dependsOn.name) > 0) : false
+    # Extract all policy events
+    - name: policyEvents
+      expression: |
+        has(object.spec) && has(object.spec.policies) ? 
+        object.spec.policies.filter(policy, has(policy.event)).map(policy, policy.event) : []
+    # Extract all policy exit codes
+    - name: policyExitCodes
+      expression: |
+        has(object.spec) && has(object.spec.policies) ? 
+        object.spec.policies.filter(policy, has(policy.exitCode)).map(policy, policy.exitCode) : []
+    # Extract volume mount paths
+    - name: volumeMountPaths
+      expression: |
+        has(object.spec) && has(object.spec.volumes) ? 
+        object.spec.volumes.map(volume, volume.mountPath) : []
+    # Valid policy events
+    - name: validEvents
+      expression: |
+        ["*","PodFailed","PodEvicted","PodPending","Unknown","TaskCompleted","JobUpdated","TaskFailed"]
+    # Valid policy actions
+    - name: validActions
+      expression: |
+        ["AbortJob", "RestartJob", "RestartTask", "RestartPod", "TerminateJob", "CompleteJob", "ResumeJob"]
+  validations:
+    # Basic job validations
+    # Validate minAvailable >= 0
+    - expression: |
+        !has(object.spec) || !has(object.spec.minAvailable) || object.spec.minAvailable >= 0
+      message: "job 'minAvailable' must be >= 0"
+      reason: Invalid
+    # Validate maxRetry >= 0
+    - expression: |
+        !has(object.spec) || !has(object.spec.maxRetry) || object.spec.maxRetry >= 0
+      message: "'maxRetry' cannot be less than zero"
+      reason: Invalid
+    # Validate TTLSecondsAfterFinished >= 0
+    - expression: |
+        !has(object.spec) || !has(object.spec.ttlSecondsAfterFinished) || 
+        object.spec.ttlSecondsAfterFinished >= 0
+      message: "'ttlSecondsAfterFinished' cannot be less than zero"
+      reason: Invalid
+    # Validate at least one task is specified
+    - expression: |
+        has(object.spec) && has(object.spec.tasks) && size(object.spec.tasks) > 0
+      message: "No task specified in job spec"
+      reason: Invalid
+    # Validate task names are unique
+    - expression: |
+        !has(object.spec) || !has(object.spec.tasks) || 
+        object.spec.tasks.all(task1, 
+          object.spec.tasks.filter(task2, task2.name == task1.name).size() == 1
+        )
+      message: "duplicated task name found"
+      reason: Invalid
+    # Validate task names are DNS1123 labels using CEL format library (gives precise errors)
+    - expression: |
+        !has(object.spec) || !has(object.spec.tasks) ||
+        object.spec.tasks.all(t, !format.dns1123Label().validate(t.name).hasValue())
+      message: "a lowercase RFC 1123 label must consist of lower case alphanumeric characters"
+      reason: Invalid
+    # Task validations
+    # Validate task replicas >= 0
+    - expression: |
+        !has(object.spec) || !has(object.spec.tasks) ||
+        object.spec.tasks.all(task, !has(task.replicas) || task.replicas >= 0)
+      message: "'replicas' < 0 in task"
+      reason: Invalid
+    # Validate task minAvailable >= 0 when specified
+    - expression: |
+        !has(object.spec) || !has(object.spec.tasks) ||
+        object.spec.tasks.all(task, 
+          !has(task.minAvailable) || task.minAvailable >= 0
+        )
+      message: "'minAvailable' < 0 in task"
+      reason: Invalid
+    # Validate task minAvailable <= replicas when specified
+    - expression: |
+        !has(object.spec) || !has(object.spec.tasks) ||
+        object.spec.tasks.all(task, 
+          !has(task.minAvailable) || !has(task.replicas) || task.minAvailable <= task.replicas
+        )
+      message: "'minAvailable' is greater than 'replicas' in task"
+      reason: Invalid
+    # Validate job minAvailable <= total replicas
+    - expression: |
+        !has(object.spec) || !has(object.spec.minAvailable) ||
+        object.spec.minAvailable <= variables.totalReplicas
+      message: "job 'minAvailable' should not be greater than total replicas in tasks"
+      reason: Invalid
+    # Policy validations
+    # Validate policy events are valid
+    - expression: |
+        !has(object.spec) || !has(object.spec.policies) ||
+        object.spec.policies.all(policy, 
+          !has(policy.event) || policy.event in variables.validEvents
+        )
+      message: "invalid policy event"
+      reason: Invalid
+    # Validate policy actions are valid
+    - expression: |
+        !has(object.spec) || !has(object.spec.policies) ||
+        object.spec.policies.all(policy, 
+          !has(policy.action) || policy.action in variables.validActions
+        )
+      message: "invalid policy action"
+      reason: Invalid
+    # Validate policy has either event or exitCode, not both
+    - expression: |
+        !has(object.spec) || !has(object.spec.policies) ||
+        object.spec.policies.all(policy, 
+          (has(policy.event) && !has(policy.exitCode)) ||
+          (!has(policy.event) && has(policy.exitCode)) ||
+          (!has(policy.event) && !has(policy.exitCode))
+        )
+      message: "must not specify event and exitCode simultaneously"
+      reason: Invalid
+    # Validate policy has either event or exitCode specified
+    - expression: |
+        !has(object.spec) || !has(object.spec.policies) ||
+        object.spec.policies.all(policy, 
+          has(policy.event) || has(policy.exitCode) || (has(policy.events) && size(policy.events) > 0)
+        )
+      message: "either event and exitCode should be specified"
+      reason: Invalid
+    # Validate policy exit code is not zero
+    - expression: |
+        !has(object.spec) || !has(object.spec.policies) ||
+        object.spec.policies.all(policy, 
+          !has(policy.exitCode) || policy.exitCode != 0
+        )
+      message: "0 is not a valid error code"
+      reason: Invalid
+    # Validate no duplicate policy events
+    - expression: |
+        !has(object.spec) || !has(object.spec.policies) ||
+        object.spec.policies.filter(policy, has(policy.event)).all(policy1,
+          object.spec.policies.filter(policy2, has(policy2.event) && policy2.event == policy1.event).size() == 1
+        )
+      message: "duplicate policy event found"
+      reason: Invalid
+    # Validate no duplicate policy exit codes
+    - expression: |
+        !has(object.spec) || !has(object.spec.policies) ||
+        object.spec.policies.filter(policy, has(policy.exitCode)).all(policy1,
+          object.spec.policies.filter(policy2, has(policy2.exitCode) && policy2.exitCode == policy1.exitCode).size() == 1
+        )
+      message: "duplicate exitCode found"
+      reason: Invalid
+    # Validate AnyEvent (*) policy restrictions
+    - expression: |
+        !has(object.spec) || !has(object.spec.policies) ||
+        !("*" in variables.policyEvents) || size(variables.policyEvents) == 1
+      message: "if there's * here, no other policy should be here"
+      reason: Invalid
+    # Volume validations
+    # Validate volume mount paths are not empty
+    - expression: |
+        !has(object.spec) || !has(object.spec.volumes) ||
+        object.spec.volumes.all(volume, volume.mountPath != "")
+      message: "mountPath is required"
+      reason: Invalid
+    # Validate no duplicate volume mount paths
+    - expression: |
+        !has(object.spec) || !has(object.spec.volumes) ||
+        object.spec.volumes.all(volume1,
+          object.spec.volumes.filter(volume2, volume2.mountPath == volume1.mountPath).size() == 1
+        )
+      message: "duplicated mountPath found"
+      reason: Invalid
+    # Validate volume has either VolumeClaimName or VolumeClaim
+    - expression: |
+        !has(object.spec) || !has(object.spec.volumes) ||
+        object.spec.volumes.all(volume, 
+          (has(volume.volumeClaimName) && volume.volumeClaimName != "") ||
+          has(volume.volumeClaim)
+        )
+      message: "either VolumeClaim or VolumeClaimName must be specified"
+      reason: Invalid
+    # Update-specific validations (for UPDATE operations)
+    # Prevent adding or removing tasks
+    - expression: |
+        request.operation != "UPDATE" || 
+        (has(oldObject.spec) && has(oldObject.spec.tasks) && 
+         has(object.spec) && has(object.spec.tasks) &&
+         size(oldObject.spec.tasks) == size(object.spec.tasks))
+      message: "job updates may not add or remove tasks"
+      reason: Invalid
+    # Prevent changing queue name on update
+    - expression: |
+        request.operation != "UPDATE" ||
+        (has(oldObject.spec) && has(oldObject.spec.queue) &&
+         has(object.spec) && has(object.spec.queue) &&
+         oldObject.spec.queue == object.spec.queue)
+      message: "job updates may not change fields other than `minAvailable`, `tasks[*].replicas under spec` and `PriorityClassName`"
+      reason: Invalid
+    # For UPDATE operations, validate minAvailable against new total replicas
+    - expression: |
+        request.operation != "UPDATE" ||
+        !has(object.spec) || !has(object.spec.minAvailable) ||
+        !has(object.spec.tasks) ||
+        object.spec.minAvailable <= object.spec.tasks.map(task, task.replicas).sum()
+      message: "job 'minAvailable' must not be greater than total replicas"
+      reason: Invalid
+    # Validate job name is a valid qualified name using CEL format library
+    - expression: |
+        !has(object.metadata) || !has(object.metadata.name) ||
+        !format.qualifiedName().validate(object.metadata.name).hasValue()
+      message: "job name must be a valid qualified name"
+      messageExpression: |
+        has(object.metadata) && has(object.metadata.name) && format.qualifiedName().validate(object.metadata.name).hasValue() ?
+        'job name errors: ' + format.qualifiedName().validate(object.metadata.name).orValue([]).join('; ') : ''
+      reason: Invalid
+---
+# Source: volcano/templates/validating_admission_policy.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: queue-validation-policy
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - operations: ["CREATE", "UPDATE", "DELETE"]
+        apiGroups: ["scheduling.volcano.sh"]
+        apiVersions: ["v1beta1"]
+        resources: ["queues"]
+  variables:
+    # Extract hierarchy annotation if present
+    - name: hierarchyPath
+      expression: |
+        has(object.metadata) && has(object.metadata.annotations) && "volcano.sh/hierarchy" in object.metadata.annotations ? 
+        object.metadata.annotations["volcano.sh/hierarchy"] : ""
+    # Extract hierarchy weights annotation if present
+    - name: hierarchyWeights
+      expression: |
+        has(object.metadata) && has(object.metadata.annotations) && "volcano.sh/hierarchy-weights" in object.metadata.annotations ?
+        object.metadata.annotations["volcano.sh/hierarchy-weights"] : ""
+    # Split hierarchy path by "/"
+    - name: hierarchyPaths
+      expression: |
+        variables.hierarchyPath != "" ? variables.hierarchyPath.split('/') : []
+    # Split hierarchy weights by "/"
+    - name: hierarchyWeightsList
+      expression: |
+        variables.hierarchyWeights != "" ? variables.hierarchyWeights.split('/') : []
+  validations:
+    # Validate queue state - only allow "Open" or "Closed" or empty
+    - expression: |
+        !has(object.status) || !has(object.status.state) || object.status.state == "" ||
+        object.status.state == "Open" || object.status.state == "Closed"
+      message: "queue state must be in [Open, Closed]"
+      reason: Invalid
+        # Basic resource validation - ensure resource values are non-empty when defined
+    - expression: |
+        !has(object.spec) || !has(object.spec.capability) || 
+        object.spec.capability.all(k, object.spec.capability[k] != "")
+      message: "capability resource values must not be empty"
+      reason: Invalid
+    - expression: |
+        !has(object.spec) || !has(object.spec.deserved) || 
+        object.spec.deserved.all(k, object.spec.deserved[k] != "")
+      message: "deserved resource values must not be empty"
+      reason: Invalid
+    - expression: |
+        !has(object.spec) || !has(object.spec.guarantee) || !has(object.spec.guarantee.resource) || 
+        object.spec.guarantee.resource.all(k, object.spec.guarantee.resource[k] != "")
+      message: "guarantee resource values must not be empty"
+      reason: Invalid
+    # Resource comparison validation using k8s quantity library
+    # Validate deserved <= capability (deserved should less equal than capability)
+    - expression: |
+        !has(object.spec) || !has(object.spec.capability) || !has(object.spec.deserved) ||
+        size(object.spec.capability) == 0 || size(object.spec.deserved) == 0 ||
+        object.spec.capability.all(resourceName,
+          !(resourceName in object.spec.deserved) ||
+          quantity(object.spec.capability[resourceName]).compareTo(quantity(object.spec.deserved[resourceName])) >= 0
+        ) &&
+        object.spec.deserved.all(resourceName,
+          resourceName in object.spec.capability &&
+          quantity(object.spec.deserved[resourceName]).compareTo(quantity(object.spec.capability[resourceName])) <= 0
+        )
+      message: "deserved should less equal than capability"
+      reason: Invalid
+    # Validate guarantee <= capability (guarantee should less equal than capability)
+    - expression: |
+        !has(object.spec) || !has(object.spec.capability) || !has(object.spec.guarantee) ||
+        !has(object.spec.guarantee.resource) || size(object.spec.capability) == 0 ||
+        size(object.spec.guarantee.resource) == 0 ||
+        object.spec.capability.all(resourceName,
+          !(resourceName in object.spec.guarantee.resource) ||
+          quantity(object.spec.capability[resourceName]).compareTo(quantity(object.spec.guarantee.resource[resourceName])) >= 0
+        ) &&
+        object.spec.guarantee.resource.all(resourceName,
+          resourceName in object.spec.capability &&
+          quantity(object.spec.guarantee.resource[resourceName]).compareTo(quantity(object.spec.capability[resourceName])) <= 0
+        )
+      message: "guarantee should less equal than capability"
+      reason: Invalid
+    # Validate guarantee <= deserved (guarantee should less equal than deserved)
+    - expression: |
+        !has(object.spec) || !has(object.spec.deserved) || !has(object.spec.guarantee) ||
+        !has(object.spec.guarantee.resource) || size(object.spec.deserved) == 0 ||
+        size(object.spec.guarantee.resource) == 0 ||
+        object.spec.deserved.all(resourceName,
+          !(resourceName in object.spec.guarantee.resource) ||
+          quantity(object.spec.deserved[resourceName]).compareTo(quantity(object.spec.guarantee.resource[resourceName])) >= 0
+        ) &&
+        object.spec.guarantee.resource.all(resourceName,
+          resourceName in object.spec.deserved &&
+          quantity(object.spec.guarantee.resource[resourceName]).compareTo(quantity(object.spec.deserved[resourceName])) <= 0
+        )
+      message: "guarantee should less equal than deserved"
+      reason: Invalid
+    # Validate hierarchical attributes - path and weights length must match
+    - expression: |
+        (variables.hierarchyPath == "" && variables.hierarchyWeights == "") ||
+        (variables.hierarchyPath != "" && variables.hierarchyWeights != "" && 
+         size(variables.hierarchyPaths) == size(variables.hierarchyWeightsList))
+      message: "volcano.sh/hierarchy must have the same length with volcano.sh/hierarchy-weights"
+      reason: Invalid
+    # Validate hierarchical weights - all must be positive numbers
+    - expression: |
+        variables.hierarchyWeights == "" ||
+        variables.hierarchyWeightsList.all(weight, 
+          weight.matches('^[0-9]+(\\.[0-9]+)?$') && double(weight) > 0
+        )
+      message: "weights in volcano.sh/hierarchy-weights must be larger than 0"
+      reason: Invalid
+    # Prevent deletion of default queue
+    - expression: |
+        request.operation != "DELETE" || oldObject.metadata.name != "default"
+      message: "`default` queue can not be deleted"
+      reason: Invalid
+    # Prevent deletion of root queue
+    - expression: |
+        request.operation != "DELETE" || oldObject.metadata.name != "root"
+      message: "`root` queue can not be deleted"
+      reason: Invalid
+---
+# Source: volcano/templates/validating_admission_policy.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: podgroup-validation-policy
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - operations: ["CREATE"]
+        apiGroups: ["scheduling.volcano.sh"]
+        apiVersions: ["v1beta1"]
+        resources: ["podgroups"]
+  variables:
+    # Extract the queue name if specified
+    - name: queueName
+      expression: |
+        has(object.spec) && has(object.spec.queue) ? object.spec.queue : ""
+  validations:
+    # Note: Original webhook only validates queue state, but ValidatingAdmissionPolicy
+    # cannot query cluster state to check if queue exists and is open.
+    # This validation is a placeholder - the actual queue state checking
+    # must be done by the remaining webhook or controller logic.
+    - expression: "true"
+      message: "PodGroup validation passed - queue validation handled elsewhere"
+---
+# Source: volcano/templates/validating_admission_policy.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: pod-validation-policy
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - operations: ["CREATE"]
+        apiGroups: [""]
+        apiVersions: ["v1"]
+        resources: ["pods"]
+  variables:
+    - name: volcanoScheduler
+      expression: |
+        has(object.spec.schedulerName) && ["volcano"].exists(s, s == object.spec.schedulerName)
+  validations:
+    # not allow configure multiple annotations at same time
+    - expression: |
+        !variables.volcanoScheduler || !has(object.metadata.annotations) || !(
+          ("volcano.sh/jdb-min-available" in object.metadata.annotations) &&
+          ("volcano.sh/jdb-max-unavailable" in object.metadata.annotations)
+        )
+      message: "not allow configure multiple annotations at same time"
+      reason: Invalid
+    # not allow negative values for jdb-min-available
+    - expression: |
+        !variables.volcanoScheduler || !has(object.metadata.annotations) || !("volcano.sh/jdb-min-available" in object.metadata.annotations) ||
+        (
+          object.metadata.annotations["volcano.sh/jdb-min-available"].matches('^[0-9]+$') &&
+          int(object.metadata.annotations["volcano.sh/jdb-min-available"]) > 0
+        ) ||
+        (
+          object.metadata.annotations["volcano.sh/jdb-min-available"].matches('^[0-9]+%$') &&
+          int(object.metadata.annotations["volcano.sh/jdb-min-available"].replace('%', '')) > 0 &&
+          int(object.metadata.annotations["volcano.sh/jdb-min-available"].replace('%', '')) < 100
+        )
+      message: "jdb-min-available must be a positive integer or a valid percentage which between 1% ~ 99%"
+      reason: Invalid
+    # not allow negative values for jdb-max-unavailable
+    - expression: |
+        !variables.volcanoScheduler || !has(object.metadata.annotations) || !("volcano.sh/jdb-max-unavailable" in object.metadata.annotations) ||
+        (
+          object.metadata.annotations["volcano.sh/jdb-max-unavailable"].matches('^[0-9]+$') &&
+          int(object.metadata.annotations["volcano.sh/jdb-max-unavailable"]) > 0
+        ) ||
+        (
+          object.metadata.annotations["volcano.sh/jdb-max-unavailable"].matches('^[0-9]+%$') &&
+          int(object.metadata.annotations["volcano.sh/jdb-max-unavailable"].replace('%', '')) > 0 &&
+          int(object.metadata.annotations["volcano.sh/jdb-max-unavailable"].replace('%', '')) < 100
+        )
+      message: "jdb-max-unavailable must be a positive integer or a valid percentage which between 1% ~ 99%"
+      reason: Invalid
+---
+# Source: volcano/templates/validating_admission_policy.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: hypernode-validation-policy
+  labels:
+    volcano.sh/component: hypernode-webhook
+    volcano.sh/migration: vap
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - operations: ["CREATE", "UPDATE"]
+        apiGroups: ["topology.volcano.sh"]
+        apiVersions: ["v1alpha1"]
+        resources: ["hypernodes"]
+  variables:
+    # Count how many selector types are defined for each member
+    - name: membersWithSelectorCounts
+      expression: |
+        has(object.spec) && has(object.spec.members) ? 
+        object.spec.members.map(member, 
+          (has(member.selector.exactMatch) ? 1 : 0) + 
+          (has(member.selector.regexMatch) ? 1 : 0) + 
+          (has(member.selector.labelMatch) ? 1 : 0)
+        ) : []
+    # Extract all exactMatch names for validation
+    - name: exactMatchNames
+      expression: |
+        has(object.spec) && has(object.spec.members) ? 
+        object.spec.members
+          .filter(member, has(member.selector.exactMatch))
+          .map(member, member.selector.exactMatch.name) : []
+    # Extract all regexMatch patterns for validation
+    - name: regexMatchPatterns
+      expression: |
+        has(object.spec) && has(object.spec.members) ? 
+        object.spec.members
+          .filter(member, has(member.selector.regexMatch))
+          .map(member, member.selector.regexMatch.pattern) : []
+  validations:
+    # Validate that at least one member is specified
+    - expression: |
+        has(object.spec) && has(object.spec.members) && size(object.spec.members) > 0
+      message: "member must have at least one member"
+      reason: Invalid
+
+    # Validate that each member has at least one selector type
+    - expression: |
+        !has(object.spec) || !has(object.spec.members) || size(object.spec.members) == 0 ||
+        variables.membersWithSelectorCounts.all(count, count >= 1)
+      message: "member selector must have one of exactMatch, regexMatch, or labelMatch"
+      reason: Invalid
+
+    # Validate that each member has no more than one selector type
+    - expression: |
+        !has(object.spec) || !has(object.spec.members) || size(object.spec.members) == 0 ||
+        variables.membersWithSelectorCounts.all(count, count <= 1)
+      message: "cannot specify more than one selector type (exactMatch, regexMatch, labelMatch)"
+      reason: Invalid
+
+    # Validate exactMatch names are not empty
+    - expression: |
+        !has(object.spec) || !has(object.spec.members) || size(object.spec.members) == 0 ||
+        object.spec.members
+          .filter(member, has(member.selector.exactMatch))
+          .all(member, member.selector.exactMatch.name != "")
+      message: "member exactMatch name is required"
+      reason: Invalid
+
+    # Validate exactMatch names follow Kubernetes qualified name rules using CEL format library
+    - expression: |
+        !has(object.spec) || !has(object.spec.members) || size(object.spec.members) == 0 ||
+        variables.exactMatchNames.all(name,
+          !format.qualifiedName().validate(name).hasValue()
+        )
+      message: "member exactMatch validate failed [name part must consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character]"
+      reason: Invalid
+
+    # Validate regexMatch patterns are not empty
+    - expression: |
+        !has(object.spec) || !has(object.spec.members) || size(object.spec.members) == 0 || 
+        object.spec.members
+          .filter(member, has(member.selector.regexMatch))
+          .all(member, member.selector.regexMatch.pattern != "")
+      message: "member regexMatch pattern is required"
+      reason: Invalid
+
+    # Basic regex pattern validation - check for common invalid patterns
+    # Note: CEL doesn't have full regex compilation support, so we do basic checks
+
+    # Check for unmatched parentheses
+    - expression: |
+        !has(object.spec) || !has(object.spec.members) || size(object.spec.members) == 0 ||
+        variables.regexMatchPatterns.all(pattern, 
+          !pattern.contains('(') || 
+          (pattern.split('(').size() == pattern.split(')').size())
+        )
+      message: "member regexMatch pattern is invalid: unmatched parentheses"
+      reason: Invalid
+
+    # Check for unmatched square brackets
+    - expression: |
+        !has(object.spec) || !has(object.spec.members) || size(object.spec.members) == 0 ||
+        variables.regexMatchPatterns.all(pattern, 
+          !pattern.contains('[') || 
+          (pattern.split('[').size() == pattern.split(']').size())
+        )
+      message: "member regexMatch pattern is invalid: unmatched square brackets"
+      reason: Invalid
+
+    # Check for unmatched curly braces
+    - expression: |
+        !has(object.spec) || !has(object.spec.members) || size(object.spec.members) == 0 ||
+        variables.regexMatchPatterns.all(pattern, 
+          !pattern.contains('{') || 
+          (pattern.split('{').size() == pattern.split('}').size())
+        )
+      message: "member regexMatch pattern is invalid: unmatched curly braces"
+      reason: Invalid
+---
+# Source: volcano/templates/validating_admission_policy.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: jobflow-validation-policy
+  labels:
+    volcano.sh/component: jobflow-webhook
+    volcano.sh/migration: vap
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - operations: ["CREATE", "UPDATE"]
+        apiGroups: ["flow.volcano.sh"]
+        apiVersions: ["v1alpha1"]
+        resources: ["jobflows"]
+  variables:
+    # Extract flows from the jobflow spec
+    - name: flows
+      expression: "has(object.spec.flows) ? object.spec.flows : []"
+    # Extract flow names for validation
+    - name: flowNames
+      expression: "variables.flows.map(flow, flow.name)"
+  validations:
+    # 1. Valid Dependency References - Dependencies must reference existing flows
+    - expression: |
+        variables.flows.all(flow,
+          !has(flow.dependsOn) ||
+          !has(flow.dependsOn.targets) ||
+          flow.dependsOn.targets.all(target, target in variables.flowNames)
+        )
+      message: "jobflow Flow is not DAG: vertex is not defined"
+      reason: Invalid
+
+    # 2. No Self-Dependencies - A flow cannot depend on itself
+    - expression: |
+        variables.flows.all(flow,
+          !has(flow.dependsOn) ||
+          !has(flow.dependsOn.targets) ||
+          !(flow.name in flow.dependsOn.targets)
+        )
+      message: "jobflow Flow is not DAG"
+      reason: Invalid
+
+  # Note: Complex DAG cycle detection (transitive cycles) is handled by
+  # the validating webhook since CEL expressions cannot implement
+  # full graph traversal algorithms. However, basic validations like
+  # missing references and self-dependencies can be handled here.
+---
+# Source: volcano/templates/validating_admission_policy.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: job-validation-policy-binding
+  labels:
+    volcano.sh/component: job-webhook
+    volcano.sh/migration: vap
+spec:
+  policyName: job-validation-policy
+  validationActions: [Deny]
+---
+# Source: volcano/templates/validating_admission_policy.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: queue-validation-policy-binding
+  labels:
+    volcano.sh/component: queue-webhook
+    volcano.sh/migration: vap
+spec:
+  policyName: queue-validation-policy
+  validationActions: [Deny]
+---
+# Source: volcano/templates/validating_admission_policy.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: podgroup-validation-policy-binding
+  labels:
+    volcano.sh/component: podgroup-webhook
+    volcano.sh/migration: vap
+spec:
+  policyName: podgroup-validation-policy
+  validationActions: [Deny]
+  matchResources:
+    resourceRules:
+      - operations: ["CREATE"]
+        apiGroups: ["scheduling.volcano.sh"]
+        apiVersions: ["v1beta1"]
+        resources: ["podgroups"]
+---
+# Source: volcano/templates/validating_admission_policy.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: pod-validation-policy-binding
+  labels:
+    volcano.sh/component: pod-webhook
+    volcano.sh/migration: vap
+spec:
+  policyName: pod-validation-policy
+  validationActions: [Deny]
+---
+# Source: volcano/templates/validating_admission_policy.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: hypernode-validation-policy-binding
+  labels:
+    volcano.sh/component: hypernode-webhook
+    volcano.sh/migration: vap
+spec:
+  policyName: hypernode-validation-policy
+  validationActions: [Deny]
+  matchResources:
+    resourceRules:
+      - operations: ["CREATE", "UPDATE"]
+        apiGroups: ["topology.volcano.sh"]
+        apiVersions: ["v1alpha1"]
+        resources: ["hypernodes"]
+---
+# Source: volcano/templates/validating_admission_policy.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: jobflow-validation-policy-binding
+  labels:
+    volcano.sh/component: jobflow-webhook
+    volcano.sh/migration: vap
+spec:
+  policyName: jobflow-validation-policy
+  validationActions: [Deny]
+---
+# Source: volcano/templates/mutating_admission_policy.yaml
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingAdmissionPolicy
+metadata:
+  name: volcano-job-mutation-policy
+spec:
+  failurePolicy: Fail
+  reinvocationPolicy: Never
+  matchConstraints:
+    resourceRules:
+    - operations: ["CREATE"]
+      apiGroups: ["batch.volcano.sh"]
+      apiVersions: ["v1alpha1"]
+      resources: ["jobs"]
+  
+  # NOTE: This MutatingAdmissionPolicy provides a PARTIAL replacement for the webhook
+  # implementation. It handles Job-level mutations but CANNOT handle task-level mutations
+  # due to CEL expression limitations in dynamically processing arbitrary numbers of tasks.
+  # 
+  # IMPLEMENTED: Job-level defaults (queue, schedulerName, maxRetry, minAvailable, plugins)
+  # NOT IMPLEMENTED: Task-level defaults (names, minAvailable, maxRetry, DNSPolicy)
+  #
+  # For complete functionality, the existing webhook must remain active alongside this policy.
+  
+  mutations:
+  # Set default queue
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        !has(object.spec.queue) || object.spec.queue == "" ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/queue",
+          value: "default"
+        }] : []
+  
+  # Set default schedulerName  
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        !has(object.spec.schedulerName) || object.spec.schedulerName == "" ?
+        [JSONPatch{
+          op: "add", 
+          path: "/spec/schedulerName",
+          value: "volcano"
+        }] : []
+  
+  # Set default maxRetry
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        !has(object.spec.maxRetry) || object.spec.maxRetry == 0 ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/maxRetry", 
+          value: 3
+        }] : []
+  
+  # Set default minAvailable
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        !has(object.spec.minAvailable) || object.spec.minAvailable == 0 ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/minAvailable",
+          value: object.spec.tasks.map(task, 
+            has(task.minAvailable) && task.minAvailable != null ? 
+            task.minAvailable : task.replicas
+          ).sum()
+        }] : []
+
+  # NOTE: The following task-level mutations are NOT implemented in MutatingAdmissionPolicy
+  # because CEL expressions cannot dynamically iterate over arbitrary number of tasks.
+  # MutatingAdmissionPolicy would require hardcoded rules for each task index (0, 1, 2, etc.)
+  # which is not scalable and differs from the webhook implementation that handles all tasks.
+  # 
+  # Missing task-level mutations that require webhook implementation:
+  # - Set default task names (task0, task1, task2, ...)
+  # - Set default task minAvailable values 
+  # - Set default task maxRetry values
+  # - Set DNSPolicy for tasks using hostNetwork
+  #
+  # These mutations must be handled by the existing webhook for proper functionality.
+
+  # Add svc plugin for distributed frameworks
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        has(object.spec.plugins) && (
+          has(object.spec.plugins.tensorflow) || 
+          has(object.spec.plugins.mpi) || 
+          has(object.spec.plugins.pytorch)
+        ) && !has(object.spec.plugins.svc) ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/plugins/svc",
+          value: []
+        }] : []
+
+  # Add ssh plugin for mpi jobs
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        has(object.spec.plugins) && has(object.spec.plugins.mpi) && 
+        !has(object.spec.plugins.ssh) ?
+        [JSONPatch{
+          op: "add", 
+          path: "/spec/plugins/ssh",
+          value: []
+        }] : []
+---
+# Source: volcano/templates/mutating_admission_policy.yaml
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingAdmissionPolicy
+metadata:
+  name: volcano-queue-mutation-policy
+spec:
+  failurePolicy: Fail
+  reinvocationPolicy: Never
+  matchConstraints:
+    resourceRules:
+    - operations: ["CREATE"]
+      apiGroups: ["scheduling.volcano.sh"]
+      apiVersions: ["v1beta1"]
+      resources: ["queues"]
+  mutations:
+  # Add root prefix to hierarchy annotation if hierarchy is specified but doesn't start with "root"
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        has(object.metadata.annotations) &&
+        "volcano.sh/hierarchy" in object.metadata.annotations &&
+        "volcano.sh/hierarchy-weights" in object.metadata.annotations &&
+        object.metadata.annotations["volcano.sh/hierarchy"] != "" &&
+        object.metadata.annotations["volcano.sh/hierarchy-weights"] != "" &&
+        !object.metadata.annotations["volcano.sh/hierarchy"].startsWith("root") ?
+        [
+          JSONPatch{
+            op: "add",
+            path: "/metadata/annotations/" + jsonpatch.escapeKey("volcano.sh/hierarchy"),
+            value: "root/" + object.metadata.annotations["volcano.sh/hierarchy"]
+          },
+          JSONPatch{
+            op: "add",
+            path: "/metadata/annotations/" + jsonpatch.escapeKey("volcano.sh/hierarchy-weights"),
+            value: "1/" + object.metadata.annotations["volcano.sh/hierarchy-weights"]
+          }
+        ] : []
+
+  # Set default reclaimable to true
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        !has(object.spec.reclaimable) ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/reclaimable",
+          value: true
+        }] : []
+
+  # Set default weight to 1 if weight is 0 or not specified
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        (!has(object.spec.weight) || object.spec.weight == 0) ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/weight", 
+          value: 1
+        }] : []
+---
+# Source: volcano/templates/mutating_admission_policy.yaml
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingAdmissionPolicy
+metadata:
+  name: volcano-podgroup-mutation-policy
+spec:
+  failurePolicy: Fail
+  reinvocationPolicy: Never
+  matchConstraints:
+    resourceRules:
+    - operations: ["CREATE"]
+      apiGroups: ["scheduling.volcano.sh"]
+      apiVersions: ["v1beta1"]
+      resources: ["podgroups"]
+  mutations:
+  # Set queue from namespace annotation if podgroup queue is default
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        object.spec.queue == "default" &&
+        namespaceObject != null &&
+        has(namespaceObject.metadata.annotations) &&
+        "scheduling.volcano.sh/queue-name" in namespaceObject.metadata.annotations ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/queue",
+          value: namespaceObject.metadata.annotations["scheduling.volcano.sh/queue-name"]
+        }] : []
+---
+# Source: volcano/templates/mutating_admission_policy.yaml
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingAdmissionPolicy
+metadata:
+  name: volcano-pod-mutation-policy
+spec:
+  # NOTE: This MutatingAdmissionPolicy provides a PARTIAL replacement for the webhook
+  # implementation. It contains HARDCODED logic for specific resource groups and namespaces
+  # and CANNOT handle dynamic configuration like the webhook implementation.
+  #
+  # IMPLEMENTED:
+  # - Scheduler name setting for 'default' resource group and 'volcano-system' namespace
+  # - Basic nodeSelector and tolerations for 'default' resource group
+  # - Fixed node-group labels and tolerations
+  #
+  # NOT IMPLEMENTED:
+  # - Dynamic configuration reading from config files
+  # - Configurable resource groups beyond 'default'
+  # - Flexible namespace handling beyond 'volcano-system'
+  # - Custom node selectors and tolerations per configuration
+  #
+  # For complete functionality with configurable resource groups and namespaces,
+  # the existing webhook must remain active alongside this policy.
+
+  failurePolicy: Fail
+  reinvocationPolicy: Never
+  matchConstraints:
+    resourceRules:
+    - operations: ["CREATE"]
+      apiGroups: [""]
+      apiVersions: ["v1"] 
+      resources: ["pods"]
+  mutations:
+  # Patch scheduler name when pod has volcano resource group annotation
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        has(object.metadata.annotations) &&
+        'volcano.sh/resource-group' in object.metadata.annotations &&
+        object.metadata.annotations['volcano.sh/resource-group'] == 'default' ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/schedulerName",
+          value: "volcano"
+        }] : []
+
+  # Add nodeSelector field if it doesn't exist for resource group matching
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        has(object.metadata.annotations) &&
+        'volcano.sh/resource-group' in object.metadata.annotations &&
+        object.metadata.annotations['volcano.sh/resource-group'] == 'default' &&
+        !has(object.spec.nodeSelector) ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/nodeSelector",
+          value: {}
+        }] : []
+
+  # Add specific nodeSelector label
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        has(object.metadata.annotations) &&
+        'volcano.sh/resource-group' in object.metadata.annotations &&
+        object.metadata.annotations['volcano.sh/resource-group'] == 'default' ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/nodeSelector/" + jsonpatch.escapeKey("volcano.sh/node-group"),
+          value: "compute"
+        }] : []
+
+  # Add tolerations field if it doesn't exist for resource group matching
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        has(object.metadata.annotations) &&
+        'volcano.sh/resource-group' in object.metadata.annotations &&
+        object.metadata.annotations['volcano.sh/resource-group'] == 'default' &&
+        !has(object.spec.tolerations) ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/tolerations",
+          value: []
+        }] : []
+
+  # Add toleration entry  
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        has(object.metadata.annotations) &&
+        'volcano.sh/resource-group' in object.metadata.annotations &&
+        object.metadata.annotations['volcano.sh/resource-group'] == 'default' ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/tolerations/-",
+          value: {
+            "key": "volcano.sh/node-group",
+            "operator": "Equal",
+            "value": "compute", 
+            "effect": "NoSchedule"
+          }
+        }] : []
+
+  # Handle namespace-based resource group matching (example for 'volcano-system' namespace)
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: |
+        object.metadata.namespace == 'volcano-system' &&
+        (!has(object.metadata.annotations) || 
+         !('volcano.sh/resource-group' in object.metadata.annotations)) ?
+        [JSONPatch{
+          op: "add",
+          path: "/spec/schedulerName", 
+          value: "volcano"
+        }] : []
+---
+# Source: volcano/templates/mutating_admission_policy.yaml
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingAdmissionPolicyBinding
+metadata:
+  name: volcano-job-mutation-binding
+spec:
+  policyName: volcano-job-mutation-policy
+  matchResources:
+    resourceRules:
+    - operations: ["CREATE"]
+      apiGroups: ["batch.volcano.sh"] 
+      apiVersions: ["v1alpha1"]
+      resources: ["jobs"]
+---
+# Source: volcano/templates/mutating_admission_policy.yaml
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingAdmissionPolicyBinding
+metadata:
+  name: volcano-queue-mutation-binding
+spec:
+  policyName: volcano-queue-mutation-policy
+  matchResources:
+    resourceRules:
+    - operations: ["CREATE"]
+      apiGroups: ["scheduling.volcano.sh"]
+      apiVersions: ["v1beta1"] 
+      resources: ["queues"]
+---
+# Source: volcano/templates/mutating_admission_policy.yaml
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingAdmissionPolicyBinding
+metadata:
+  name: volcano-podgroup-mutation-binding
+spec:
+  policyName: volcano-podgroup-mutation-policy
+  matchResources:
+    resourceRules:
+    - operations: ["CREATE"]
+      apiGroups: ["scheduling.volcano.sh"]
+      apiVersions: ["v1beta1"]
+      resources: ["podgroups"]
+---
+# Source: volcano/templates/mutating_admission_policy.yaml
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingAdmissionPolicyBinding
+metadata:
+  name: volcano-pod-mutation-binding
+spec:
+  policyName: volcano-pod-mutation-policy
+  matchResources:
+    resourceRules:
+    - operations: ["CREATE"]
+      apiGroups: [""]
+      apiVersions: ["v1"]
+      resources: ["pods"]
+---
 # Source: jobflow/templates/flow_v1alpha1_jobflows.yaml
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
