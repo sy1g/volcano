@@ -37,7 +37,7 @@ require (
 	k8s.io/apimachinery v0.33.2
 	k8s.io/apiserver v0.33.2
 	k8s.io/client-go v0.33.2
-	k8s.io/code-generator v0.33.2
+	k8s.io/code-generator v0.33.3
 	k8s.io/component-base v0.33.2
 	k8s.io/component-helpers v0.33.2
 	k8s.io/csi-translation-lib v0.33.2
